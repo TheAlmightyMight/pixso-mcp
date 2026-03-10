@@ -149,6 +149,71 @@ function extractTransform(node) {
   return Object.keys(result).length > 0 ? result : null;
 }
 
+/** @param {SceneNode} node */
+function extractCornerRadius(node) {
+  if ("cornerRadius" in node && node.cornerRadius !== pixso.mixed) {
+    if (node.cornerRadius !== 0) return { cornerRadius: node.cornerRadius };
+    return null;
+  }
+  const data = {};
+  let hasRadius = false;
+  if ("topLeftRadius" in node && node.topLeftRadius) { data.topLeftRadius = node.topLeftRadius; hasRadius = true; }
+  if ("topRightRadius" in node && node.topRightRadius) { data.topRightRadius = node.topRightRadius; hasRadius = true; }
+  if ("bottomLeftRadius" in node && node.bottomLeftRadius) { data.bottomLeftRadius = node.bottomLeftRadius; hasRadius = true; }
+  if ("bottomRightRadius" in node && node.bottomRightRadius) { data.bottomRightRadius = node.bottomRightRadius; hasRadius = true; }
+  return hasRadius ? data : null;
+}
+
+/** @param {SceneNode} node */
+function extractAutoLayout(node) {
+  if (!("layoutMode" in node) || node.layoutMode === "NONE") return null;
+  const data = {
+    layoutMode: node.layoutMode,
+    itemSpacing: node.itemSpacing,
+    paddingLeft: node.paddingLeft,
+    paddingRight: node.paddingRight,
+    paddingTop: node.paddingTop,
+    paddingBottom: node.paddingBottom,
+  };
+  if ("primaryAxisAlignItems" in node) data.primaryAxisAlignItems = node.primaryAxisAlignItems;
+  if ("counterAxisAlignItems" in node) data.counterAxisAlignItems = node.counterAxisAlignItems;
+  if ("primaryAxisSizingMode" in node) data.primaryAxisSizingMode = node.primaryAxisSizingMode;
+  if ("counterAxisSizingMode" in node) data.counterAxisSizingMode = node.counterAxisSizingMode;
+  return data;
+}
+
+/** @param {SceneNode} node */
+function extractConstraints(node) {
+  const data = {};
+  if ("constraints" in node) {
+    data.constraints = {
+      horizontal: node.constraints.horizontal,
+      vertical: node.constraints.vertical,
+    };
+  }
+  if ("layoutSizingHorizontal" in node) data.layoutSizingHorizontal = node.layoutSizingHorizontal;
+  if ("layoutSizingVertical" in node) data.layoutSizingVertical = node.layoutSizingVertical;
+  return Object.keys(data).length > 0 ? data : null;
+}
+
+/** @param {SceneNode} node */
+function extractStyles(node) {
+  const data = {};
+  if ("fillStyleId" in node && node.fillStyleId && node.fillStyleId !== pixso.mixed) {
+    const style = pixso.getStyleById(node.fillStyleId);
+    if (style) data.fillStyleName = style.name;
+  }
+  if ("strokeStyleId" in node && node.strokeStyleId && node.strokeStyleId !== pixso.mixed) {
+    const style = pixso.getStyleById(node.strokeStyleId);
+    if (style) data.strokeStyleName = style.name;
+  }
+  if (node.type === "TEXT" && "textStyleId" in node && node.textStyleId && node.textStyleId !== pixso.mixed) {
+    const style = pixso.getStyleById(node.textStyleId);
+    if (style) data.textStyleName = style.name;
+  }
+  return Object.keys(data).length > 0 ? data : null;
+}
+
 /**
  * Сериализация узла Pixso с фильтрацией свойств для экономии токенов.
  * @param {SceneNode} node - Узел Pixso.
