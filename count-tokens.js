@@ -31,43 +31,14 @@ wss.on("connection", (ws) => {
     try {
       const msg = JSON.parse(data.toString());
       if (msg.type === "response" && msg.id === id) {
-        const json = JSON.stringify(msg.payload);
         const jsonPretty = JSON.stringify(msg.payload, null, 2);
 
-        // Count nodes
-        const nodeCount = (json.match(/"id":/g) || []).length;
-
-        // Token estimation: ~4 chars per token for JSON (conservative)
-        const estimatedTokens = Math.ceil(json.length / 4);
-
-        // Build report
-        const lines = [];
-        lines.push("=== Token Report ===");
-        lines.push(`Nodes:            ${nodeCount}`);
-        lines.push(`JSON chars:       ${json.length.toLocaleString()}`);
-        lines.push(`Estimated tokens: ~${estimatedTokens.toLocaleString()}`);
-        lines.push(`Pretty chars:     ${jsonPretty.length.toLocaleString()} (if using indent)`);
-        lines.push(`Pretty tokens:    ~${Math.ceil(jsonPretty.length / 4).toLocaleString()} (if using indent)`);
-        lines.push("");
-
-        // Show first 2000 chars of compact JSON
-        if (json.length > 2000) {
-          lines.push("=== Preview (first 2000 chars) ===");
-          lines.push(json.slice(0, 2000) + "...");
-        } else {
-          lines.push("=== Full Output ===");
-          lines.push(jsonPretty);
-        }
-
-        // Log to console
-        lines.forEach(line => console.log(line));
-
-        // Write to file
+        // Write JSON to file
         const timestamp = new Date().toISOString().replace(/[:.]/g, "-");
-        const filename = `token-report-${timestamp}.txt`;
+        const filename = `selection-${timestamp}.json`;
         const filepath = `${testResultsDir}/${filename}`;
-        fs.writeFileSync(filepath, lines.join("\n"));
-        console.log(`\nResults saved to ${filepath}`);
+        fs.writeFileSync(filepath, jsonPretty);
+        console.log(`Selection saved to ${filepath}`);
 
         ws.close();
         wss.close();
