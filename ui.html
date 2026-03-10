@@ -47,8 +47,13 @@
         background-color: #cf1322;
       }
       @keyframes pulse {
-        0%, 100% { opacity: 1; }
-        50% { opacity: 0.4; }
+        0%,
+        100% {
+          opacity: 1;
+        }
+        50% {
+          opacity: 0.4;
+        }
       }
       .info-grid {
         display: grid;
@@ -202,10 +207,15 @@
       let reconnectCount = 0;
       let connectedAt = null;
       let uptimeTimer = null;
+      let reconnectTimer = null;
       let stats = { requests: 0, ok: 0, errors: 0 };
 
       function formatTime(date) {
-        return date.toLocaleTimeString("ru-RU", { hour: "2-digit", minute: "2-digit", second: "2-digit" });
+        return date.toLocaleTimeString("ru-RU", {
+          hour: "2-digit",
+          minute: "2-digit",
+          second: "2-digit",
+        });
       }
 
       function formatUptime(ms) {
@@ -224,6 +234,10 @@
       }
 
       function setConnected() {
+        if (reconnectTimer) {
+          clearInterval(reconnectTimer);
+          reconnectTimer = null;
+        }
         statusBar.className = "status-bar connected";
         statusText.textContent = "Подключено к MCP-серверу";
         connectedAt = Date.now();
@@ -288,10 +302,28 @@
         };
 
         socket.onclose = () => {
-          setDisconnected("Переподключение через 5с...");
+          if (reconnectTimer) clearInterval(reconnectTimer);
+
           reconnectCount++;
           reconnectCountEl.textContent = reconnectCount;
-          setTimeout(connect, RECONNECT_DELAY);
+
+          let secondsLeft = Math.floor(RECONNECT_DELAY / 1000);
+          const updateReconnectStatus = () => {
+            setDisconnected(`Переподключение через ${secondsLeft}с...`);
+          };
+
+          updateReconnectStatus();
+
+          reconnectTimer = setInterval(() => {
+            secondsLeft--;
+            if (secondsLeft <= 0) {
+              clearInterval(reconnectTimer);
+              reconnectTimer = null;
+              connect();
+            } else {
+              updateReconnectStatus();
+            }
+          }, 1000);
         };
 
         socket.onerror = (err) => {
@@ -344,7 +376,8 @@
             detail = `${message.payload.length} элемент(ов)`;
           } else if (message.payload && typeof message.payload === "object") {
             const keys = Object.keys(message.payload);
-            detail = keys.length <= 3 ? keys.join(", ") : `${keys.length} полей`;
+            detail =
+              keys.length <= 3 ? keys.join(", ") : `${keys.length} полей`;
           }
 
           addLogEntry(message.command || "response", !!isError, detail);
