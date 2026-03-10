@@ -162,17 +162,21 @@ function extractStyles(node) {
   const data = {};
   if ("fillStyleId" in node && node.fillStyleId && node.fillStyleId !== pixso.mixed) {
     const style = pixso.getStyleById(node.fillStyleId);
-    if (style) data.fillStyleName = style.name;
+    if (style) data.fillStyleName = stripStylePrefix(style.name);
   }
   if ("strokeStyleId" in node && node.strokeStyleId && node.strokeStyleId !== pixso.mixed) {
     const style = pixso.getStyleById(node.strokeStyleId);
-    if (style) data.strokeStyleName = style.name;
+    if (style) data.strokeStyleName = stripStylePrefix(style.name);
   }
   if (node.type === "TEXT" && "textStyleId" in node && node.textStyleId && node.textStyleId !== pixso.mixed) {
     const style = pixso.getStyleById(node.textStyleId);
-    if (style) data.textStyleName = style.name;
+    if (style) data.textStyleName = stripStylePrefix(style.name);
   }
   return Object.keys(data).length > 0 ? data : null;
+}
+
+function stripStylePrefix(name) {
+  return name.replace(/^Light\//, "");
 }
 
 const PROFILES = {
@@ -244,8 +248,8 @@ pixso.ui.onmessage = async (msg) => {
 
       case "listDesignTokens": {
         // Список всех стилей в документе (Design Tokens)
-        const paintStyles = pixso.getLocalPaintStyles().map(s => ({ id: s.id, name: s.name, type: "PAINT", description: s.description }));
-        const textStyles = pixso.getLocalTextStyles().map(s => ({ id: s.id, name: s.name, type: "TEXT", description: s.description }));
+        const paintStyles = pixso.getLocalPaintStyles().map(s => ({ id: s.id, name: stripStylePrefix(s.name), type: "PAINT", description: s.description }));
+        const textStyles = pixso.getLocalTextStyles().map(s => ({ id: s.id, name: stripStylePrefix(s.name), type: "TEXT", description: s.description }));
         payload = { paintStyles, textStyles };
         break;
       }
