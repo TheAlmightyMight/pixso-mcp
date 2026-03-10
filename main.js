@@ -5,6 +5,40 @@ pixso.showUI(__html__, {
   height: 420,
 });
 
+/** @param {SceneNode} node */
+function extractBase(node) {
+  return {
+    id: node.id,
+    name: node.name,
+    type: node.type,
+    visible: node.visible,
+  };
+}
+
+/** @param {SceneNode} node */
+function extractGeometry(node) {
+  const data = {};
+  if ("x" in node) data.x = Math.round(node.x * 10) / 10;
+  if ("y" in node) data.y = Math.round(node.y * 10) / 10;
+  if ("width" in node) data.width = Math.round(node.width * 10) / 10;
+  if ("height" in node) data.height = Math.round(node.height * 10) / 10;
+  if ("absoluteTransform" in node) {
+    data.absoluteX = Math.round(node.absoluteTransform[0][2] * 10) / 10;
+    data.absoluteY = Math.round(node.absoluteTransform[1][2] * 10) / 10;
+  }
+  return data;
+}
+
+/** @param {SceneNode} node */
+function extractParent(node) {
+  if (!node.parent || node.parent.type === "PAGE") return null;
+  return {
+    parentId: node.parent.id,
+    parentName: node.parent.name,
+    parentType: node.parent.type,
+  };
+}
+
 /**
  * Сериализация узла Pixso с фильтрацией свойств для экономии токенов.
  * @param {SceneNode} node - Узел Pixso.
