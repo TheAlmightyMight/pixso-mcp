@@ -1,9 +1,10 @@
-<!DOCTYPE html>
+<!doctype html>
 <html>
   <head>
     <style>
       body {
-        font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+        font-family:
+          -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
         padding: 12px;
         margin: 0;
         background-color: #ffffff;
@@ -37,7 +38,7 @@
   <body>
     <h3>Pixso MCP Connector</h3>
     <div id="status" class="status disconnected">🔌 Отключено от сервера</div>
-    <p>Плагин работает как мост между Pixso и MCP-сервером.</p>
+    <p>Плагин работает как мост между Pixso и MCP-сервером. !!!</p>
 
     <script>
       const statusEl = document.getElementById("status");
@@ -45,8 +46,8 @@
       let pendingRequestIds = new Map();
 
       function connect() {
-        // Подключаемся к локальному WebSocket серверу (порт 3001 по умолчанию)
-        socket = new WebSocket("ws://localhost:3001");
+        // Подключаемся к локальному WebSocket серверу (порт 3667 по умолчанию)
+        socket = new WebSocket("ws://localhost:3667");
 
         socket.onopen = () => {
           statusEl.innerText = "✅ Подключено к MCP-серверу";
@@ -79,7 +80,7 @@
                     params: data.params,
                   },
                 },
-                "*"
+                "*",
               );
             }
           } catch (err) {
@@ -99,7 +100,7 @@
                 id: message.id,
                 type: "response",
                 payload: message.payload,
-              })
+              }),
             );
           }
         }

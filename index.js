@@ -21,11 +21,11 @@ const server = new Server(
     capabilities: {
       tools: {},
     },
-  }
+  },
 );
 
 // WebSocket-сервер для подключения плагина Pixso
-const wss = new WebSocketServer({ port: 3001 });
+const wss = new WebSocketServer({ port: 3667 });
 /** @type {import("ws").WebSocket | null} */
 let pluginSocket = null;
 
@@ -66,7 +66,9 @@ wss.on("connection", (ws) => {
 async function callPlugin(command, params = {}) {
   const socket = pluginSocket;
   if (!socket) {
-    throw new Error("Плагин Pixso не подключен. Убедитесь, что плагин запущен в Pixso.");
+    throw new Error(
+      "Плагин Pixso не подключен. Убедитесь, что плагин запущен в Pixso.",
+    );
   }
 
   const id = Math.random().toString(36).substring(7);
@@ -91,7 +93,8 @@ server.setRequestHandler(ListToolsRequestSchema, async () => {
     tools: [
       {
         name: "get_selection",
-        description: "Получает информацию о текущих выделенных элементах в Pixso (оптимизировано для экономии токенов).",
+        description:
+          "Получает информацию о текущих выделенных элементах в Pixso (оптимизировано для экономии токенов).",
         inputSchema: {
           type: "object",
           properties: {},
@@ -99,7 +102,8 @@ server.setRequestHandler(ListToolsRequestSchema, async () => {
       },
       {
         name: "list_layers",
-        description: "Получает список слоев верхнего уровня на текущей странице Pixso.",
+        description:
+          "Получает список слоев верхнего уровня на текущей странице Pixso.",
         inputSchema: {
           type: "object",
           properties: {},
@@ -107,7 +111,8 @@ server.setRequestHandler(ListToolsRequestSchema, async () => {
       },
       {
         name: "get_node_details",
-        description: "Получает детальную информацию о конкретном узле по его ID.",
+        description:
+          "Получает детальную информацию о конкретном узле по его ID.",
         inputSchema: {
           type: "object",
           properties: {
@@ -118,7 +123,8 @@ server.setRequestHandler(ListToolsRequestSchema, async () => {
       },
       {
         name: "list_design_tokens",
-        description: "Получает список всех дизайн-токенов (цветовых и текстовых стилей) в документе Pixso.",
+        description:
+          "Получает список всех дизайн-токенов (цветовых и текстовых стилей) в документе Pixso.",
         inputSchema: {
           type: "object",
           properties: {},
