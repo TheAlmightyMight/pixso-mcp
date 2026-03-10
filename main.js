@@ -1,8 +1,8 @@
 // Показываем UI для работы WebSocket-моста
 pixso.showUI(__html__, {
   title: "Pixso MCP Bridge",
-  width: 250,
-  height: 120,
+  width: 280,
+  height: 420,
 });
 
 /**
@@ -163,6 +163,7 @@ pixso.ui.onmessage = async (msg) => {
   pixso.ui.postMessage({
     type: "mcp-response",
     id: id,
+    command: command,
     payload: payload,
   });
 };

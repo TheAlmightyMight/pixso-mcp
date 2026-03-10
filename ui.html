@@ -8,56 +8,290 @@
         padding: 12px;
         margin: 0;
         background-color: #ffffff;
-      }
-      .status {
         font-size: 12px;
-        padding: 8px;
-        border-radius: 4px;
-        margin-bottom: 12px;
-      }
-      .status.connected {
-        background-color: #e6f7ef;
-        color: #1a7f37;
-      }
-      .status.disconnected {
-        background-color: #fff1f0;
-        color: #cf1322;
+        color: #333;
       }
       h3 {
         margin: 0 0 8px 0;
         font-size: 14px;
         color: #333;
       }
-      p {
-        font-size: 12px;
+      .status-bar {
+        display: flex;
+        align-items: center;
+        gap: 8px;
+        padding: 8px;
+        border-radius: 6px;
+        margin-bottom: 12px;
+        font-weight: 500;
+      }
+      .status-bar.connected {
+        background-color: #e6f7ef;
+        color: #1a7f37;
+      }
+      .status-bar.disconnected {
+        background-color: #fff1f0;
+        color: #cf1322;
+      }
+      .status-dot {
+        width: 8px;
+        height: 8px;
+        border-radius: 50%;
+        flex-shrink: 0;
+      }
+      .connected .status-dot {
+        background-color: #1a7f37;
+        animation: pulse 2s infinite;
+      }
+      .disconnected .status-dot {
+        background-color: #cf1322;
+      }
+      @keyframes pulse {
+        0%, 100% { opacity: 1; }
+        50% { opacity: 0.4; }
+      }
+      .info-grid {
+        display: grid;
+        grid-template-columns: auto 1fr;
+        gap: 4px 12px;
+        margin-bottom: 12px;
+        padding: 8px;
+        background: #f7f8fa;
+        border-radius: 6px;
+      }
+      .info-label {
+        color: #888;
+        white-space: nowrap;
+      }
+      .info-value {
+        color: #333;
+        font-variant-numeric: tabular-nums;
+      }
+      .stats {
+        display: flex;
+        gap: 8px;
+        margin-bottom: 12px;
+      }
+      .stat-card {
+        flex: 1;
+        padding: 8px;
+        background: #f7f8fa;
+        border-radius: 6px;
+        text-align: center;
+      }
+      .stat-number {
+        font-size: 18px;
+        font-weight: 600;
+        color: #333;
+      }
+      .stat-label {
+        font-size: 10px;
+        color: #888;
+        margin-top: 2px;
+      }
+      .log-section {
+        margin-top: 4px;
+      }
+      .log-header {
+        font-size: 11px;
+        font-weight: 600;
+        color: #888;
+        text-transform: uppercase;
+        letter-spacing: 0.5px;
+        margin-bottom: 4px;
+      }
+      .log {
+        max-height: 120px;
+        overflow-y: auto;
+        background: #f7f8fa;
+        border-radius: 6px;
+        padding: 6px 8px;
+      }
+      .log-entry {
+        display: flex;
+        align-items: baseline;
+        gap: 6px;
+        padding: 2px 0;
+        font-size: 11px;
+        border-bottom: 1px solid #eee;
+      }
+      .log-entry:last-child {
+        border-bottom: none;
+      }
+      .log-time {
+        color: #aaa;
+        font-variant-numeric: tabular-nums;
+        flex-shrink: 0;
+      }
+      .log-cmd {
+        color: #5b21b6;
+        font-weight: 500;
+        flex-shrink: 0;
+      }
+      .log-result {
         color: #666;
-        margin: 0;
+        overflow: hidden;
+        text-overflow: ellipsis;
+        white-space: nowrap;
+      }
+      .log-result.error {
+        color: #cf1322;
+      }
+      .log-empty {
+        color: #bbb;
+        font-size: 11px;
+        text-align: center;
+        padding: 8px 0;
       }
     </style>
   </head>
   <body>
     <h3>Pixso MCP Connector</h3>
-    <div id="status" class="status disconnected">🔌 Отключено от сервера</div>
-    <p>Плагин работает как мост между Pixso и MCP-сервером. !!!</p>
+
+    <div id="status-bar" class="status-bar disconnected">
+      <span class="status-dot"></span>
+      <span id="status-text">Отключено от сервера</span>
+    </div>
+
+    <div class="info-grid">
+      <span class="info-label">Сервер</span>
+      <span class="info-value" id="server-addr">ws://localhost:3667</span>
+      <span class="info-label">Подключение</span>
+      <span class="info-value" id="connected-since">—</span>
+      <span class="info-label">Переподключения</span>
+      <span class="info-value" id="reconnect-count">0</span>
+    </div>
+
+    <div class="stats">
+      <div class="stat-card">
+        <div class="stat-number" id="req-count">0</div>
+        <div class="stat-label">Запросов</div>
+      </div>
+      <div class="stat-card">
+        <div class="stat-number" id="ok-count">0</div>
+        <div class="stat-label">Успешных</div>
+      </div>
+      <div class="stat-card">
+        <div class="stat-number" id="err-count">0</div>
+        <div class="stat-label">Ошибок</div>
+      </div>
+    </div>
+
+    <div class="log-section">
+      <div class="log-header">Журнал запросов</div>
+      <div class="log" id="log">
+        <div class="log-empty">Запросов пока не было</div>
+      </div>
+    </div>
 
     <script>
-      const statusEl = document.getElementById("status");
+      const WS_URL = "ws://localhost:3667";
+      const RECONNECT_DELAY = 5000;
+      const MAX_LOG_ENTRIES = 50;
+
+      const statusBar = document.getElementById("status-bar");
+      const statusText = document.getElementById("status-text");
+      const connectedSinceEl = document.getElementById("connected-since");
+      const reconnectCountEl = document.getElementById("reconnect-count");
+      const reqCountEl = document.getElementById("req-count");
+      const okCountEl = document.getElementById("ok-count");
+      const errCountEl = document.getElementById("err-count");
+      const logEl = document.getElementById("log");
+
       let socket = null;
-      let pendingRequestIds = new Map();
+      let reconnectCount = 0;
+      let connectedAt = null;
+      let uptimeTimer = null;
+      let stats = { requests: 0, ok: 0, errors: 0 };
+
+      function formatTime(date) {
+        return date.toLocaleTimeString("ru-RU", { hour: "2-digit", minute: "2-digit", second: "2-digit" });
+      }
+
+      function formatUptime(ms) {
+        const s = Math.floor(ms / 1000);
+        const m = Math.floor(s / 60);
+        const h = Math.floor(m / 60);
+        if (h > 0) return `${h}ч ${m % 60}м`;
+        if (m > 0) return `${m}м ${s % 60}с`;
+        return `${s}с`;
+      }
+
+      function updateUptime() {
+        if (connectedAt) {
+          connectedSinceEl.textContent = formatUptime(Date.now() - connectedAt);
+        }
+      }
+
+      function setConnected() {
+        statusBar.className = "status-bar connected";
+        statusText.textContent = "Подключено к MCP-серверу";
+        connectedAt = Date.now();
+        updateUptime();
+        uptimeTimer = setInterval(updateUptime, 1000);
+      }
+
+      function setDisconnected(reason) {
+        statusBar.className = "status-bar disconnected";
+        statusText.textContent = reason || "Отключено от сервера";
+        connectedAt = null;
+        connectedSinceEl.textContent = "—";
+        if (uptimeTimer) {
+          clearInterval(uptimeTimer);
+          uptimeTimer = null;
+        }
+      }
+
+      function updateStats() {
+        reqCountEl.textContent = stats.requests;
+        okCountEl.textContent = stats.ok;
+        errCountEl.textContent = stats.errors;
+      }
+
+      function addLogEntry(command, isError, detail) {
+        // Remove empty placeholder
+        const empty = logEl.querySelector(".log-empty");
+        if (empty) empty.remove();
+
+        const entry = document.createElement("div");
+        entry.className = "log-entry";
+
+        const time = document.createElement("span");
+        time.className = "log-time";
+        time.textContent = formatTime(new Date());
+
+        const cmd = document.createElement("span");
+        cmd.className = "log-cmd";
+        cmd.textContent = command;
+
+        const result = document.createElement("span");
+        result.className = "log-result" + (isError ? " error" : "");
+        result.textContent = detail || (isError ? "ошибка" : "ок");
+
+        entry.appendChild(time);
+        entry.appendChild(cmd);
+        entry.appendChild(result);
+
+        logEl.prepend(entry);
+
+        // Trim old entries
+        while (logEl.children.length > MAX_LOG_ENTRIES) {
+          logEl.removeChild(logEl.lastChild);
+        }
+      }
 
       function connect() {
-        // Подключаемся к локальному WebSocket серверу (порт 3667 по умолчанию)
-        socket = new WebSocket("ws://localhost:3667");
+        socket = new WebSocket(WS_URL);
 
         socket.onopen = () => {
-          statusEl.innerText = "✅ Подключено к MCP-серверу";
-          statusEl.className = "status connected";
+          setConnected();
         };
 
         socket.onclose = () => {
-          statusEl.innerText = "🔌 Отключено. Переподключение через 5с...";
-          statusEl.className = "status disconnected";
-          setTimeout(connect, 5000);
+          setDisconnected("Переподключение через 5с...");
+          reconnectCount++;
+          reconnectCountEl.textContent = reconnectCount;
+          setTimeout(connect, RECONNECT_DELAY);
         };
 
         socket.onerror = (err) => {
@@ -65,12 +299,13 @@
           socket.close();
         };
 
-        // Сообщения от MCP-сервера
         socket.onmessage = (event) => {
           try {
             const data = JSON.parse(event.data);
             if (data.type === "request") {
-              // Пересылаем запрос в main.js (основной поток плагина)
+              stats.requests++;
+              updateStats();
+
               parent.postMessage(
                 {
                   pluginMessage: {
@@ -89,11 +324,31 @@
         };
       }
 
-      // Сообщения от main.js (основной поток плагина)
+      // Сообщения от main.js
       window.onmessage = (event) => {
         const message = event.data.pluginMessage;
         if (message && message.type === "mcp-response") {
-          // Отправляем результат обратно на MCP-сервер по WebSocket
+          const isError = message.payload && message.payload.error;
+          if (isError) {
+            stats.errors++;
+          } else {
+            stats.ok++;
+          }
+          updateStats();
+
+          // Build a short detail string for the log
+          let detail = "";
+          if (isError) {
+            detail = message.payload.error;
+          } else if (Array.isArray(message.payload)) {
+            detail = `${message.payload.length} элемент(ов)`;
+          } else if (message.payload && typeof message.payload === "object") {
+            const keys = Object.keys(message.payload);
+            detail = keys.length <= 3 ? keys.join(", ") : `${keys.length} полей`;
+          }
+
+          addLogEntry(message.command || "response", !!isError, detail);
+
           if (socket && socket.readyState === WebSocket.OPEN) {
             socket.send(
               JSON.stringify({
@@ -106,7 +361,6 @@
         }
       };
 
-      // Запуск подключения
       connect();
     </script>
   </body>

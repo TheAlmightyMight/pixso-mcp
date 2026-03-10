@@ -1,14 +1,14 @@
 {
-  "name": "Hello Pixso",
-  "id": "hello-pixso-plugin",
+  "name": "Pixso MCP",
+  "id": "mcp-pixso-plugin",
   "api": "1.0.0",
   "main": "main.js",
   "ui": "ui.html",
   "editorType": ["pixso", "dev"],
   "menu": [
     {
-      "name": "Hello World",
-      "command": "hello"
+      "name": "Open / Launch",
+      "command": "Opened."
     }
   ]
 }
