@@ -76,7 +76,7 @@ async function callPlugin(command, params = {}) {
     const timeout = setTimeout(() => {
       pendingRequests.delete(id);
       reject(new Error("Тайм-аут ожидания ответа от плагина Pixso"));
-    }, 10000);
+    }, 30000);
 
     pendingRequests.set(id, (payload) => {
       clearTimeout(timeout);
@@ -94,7 +94,7 @@ server.setRequestHandler(ListToolsRequestSchema, async () => {
       {
         name: "get_selection",
         description:
-          "Получает информацию о текущих выделенных элементах в Pixso (оптимизировано для экономии токенов).",
+          "Returns complete design specification of selected elements including full subtree, styles, effects, layout, and constraints. Optimized for code generation.",
         inputSchema: {
           type: "object",
           properties: {},
@@ -112,7 +112,7 @@ server.setRequestHandler(ListToolsRequestSchema, async () => {
       {
         name: "get_node_details",
         description:
-          "Получает детальную информацию о конкретном узле по его ID.",
+          "Returns detailed design specification of a single node by ID. Does not include children.",
         inputSchema: {
           type: "object",
           properties: {
