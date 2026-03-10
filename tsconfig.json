@@ -3,12 +3,33 @@
     "target": "ESNext",
     "module": "NodeNext",
     "moduleResolution": "NodeNext",
+
+    /* Core strictness — all sub-flags of `strict` are on */
     "strict": true,
-    "skipLibCheck": true,
-    "esModuleInterop": true,
+
+    /* Additional strict checks (LLM-safe) */
+    "noUncheckedIndexedAccess": true,
+    "noUnusedLocals": true,
+    "noFallthroughCasesInSwitch": true,
+    "noImplicitReturns": true,
+    "noImplicitOverride": true,
+    "forceConsistentCasingInFileNames": true,
+    "isolatedModules": true,
+
+    /* Intentionally OFF — these trip up LLMs regularly:
+       - exactOptionalPropertyTypes: `{ x?: string }` rejects `{ x: undefined }`
+       - noUnusedParameters: LLMs generate callbacks with unused params
+       - noPropertyAccessFromIndexSignature: LLMs use dot notation naturally
+    */
+
+    /* JS project — check without emitting */
     "allowJs": true,
     "checkJs": true,
-    "noEmit": true
+    "resolveJsonModule": true,
+    "noEmit": true,
+
+    "skipLibCheck": true,
+    "esModuleInterop": true
   },
   "include": ["index.js"]
 }

@@ -25,7 +25,14 @@ wss.on("connection", (ws) => {
 
   const id = "token-count-" + Date.now();
 
-  ws.send(JSON.stringify({ id, type: "request", command: "getSelection", params: {} }));
+  ws.send(
+    JSON.stringify({
+      id,
+      type: "request",
+      command: "listDesignTokens",
+      params: {},
+    }),
+  );
 
   ws.on("message", (data) => {
     try {
@@ -46,11 +53,15 @@ wss.on("connection", (ws) => {
         lines.push(`Nodes:            ${nodeCount}`);
         lines.push(`JSON chars:       ${json.length.toLocaleString()}`);
         lines.push(`Estimated tokens: ~${estimatedTokens.toLocaleString()}`);
-        lines.push(`Pretty chars:     ${jsonPretty.length.toLocaleString()} (if using indent)`);
-        lines.push(`Pretty tokens:    ~${Math.ceil(jsonPretty.length / 4).toLocaleString()} (if using indent)`);
+        lines.push(
+          `Pretty chars:     ${jsonPretty.length.toLocaleString()} (if using indent)`,
+        );
+        lines.push(
+          `Pretty tokens:    ~${Math.ceil(jsonPretty.length / 4).toLocaleString()} (if using indent)`,
+        );
 
         // Log to console
-        lines.forEach(line => console.log(line));
+        lines.forEach((line) => console.log(line));
 
         // Save JSON to file
         const timestamp = new Date().toISOString().replace(/[:.]/g, "-");
