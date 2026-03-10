@@ -7,12 +7,13 @@ pixso.showUI(__html__, {
 
 /** @param {SceneNode} node */
 function extractBase(node) {
-  return {
+  const data = {
     id: node.id,
     name: node.name,
     type: node.type,
-    visible: node.visible,
   };
+  if (!node.visible) data.visible = false;
+  return data;
 }
 
 /** @param {SceneNode} node */
@@ -20,51 +21,35 @@ function extractGeometry(node) {
   const data = {};
   if ("x" in node) data.x = Math.round(node.x * 10) / 10;
   if ("y" in node) data.y = Math.round(node.y * 10) / 10;
-  if ("width" in node) data.width = Math.round(node.width * 10) / 10;
-  if ("height" in node) data.height = Math.round(node.height * 10) / 10;
-  if ("absoluteTransform" in node) {
-    data.absoluteX = Math.round(node.absoluteTransform[0][2] * 10) / 10;
-    data.absoluteY = Math.round(node.absoluteTransform[1][2] * 10) / 10;
-  }
+  if ("width" in node) data.w = Math.round(node.width * 10) / 10;
+  if ("height" in node) data.h = Math.round(node.height * 10) / 10;
   return data;
 }
 
-/** @param {SceneNode} node */
-function extractParent(node) {
-  if (!node.parent || node.parent.type === "PAGE") return null;
-  return {
-    parentId: node.parent.id,
-    parentName: node.parent.name,
-    parentType: node.parent.type,
-  };
+function toHex(r, g, b) {
+  return "#" + ((1 << 24) + (Math.round(r * 255) << 16) + (Math.round(g * 255) << 8) + Math.round(b * 255)).toString(16).slice(1);
 }
 
 function serializeFill(f) {
   if (f.type === "SOLID") {
-    return {
-      type: "SOLID",
-      r: Math.round(f.color.r * 255),
-      g: Math.round(f.color.g * 255),
-      b: Math.round(f.color.b * 255),
-      opacity: f.opacity,
-    };
+    const data = { color: toHex(f.color.r, f.color.g, f.color.b) };
+    if (f.opacity !== undefined && f.opacity < 1) data.opacity = f.opacity;
+    return data;
   }
   if (f.type === "LINEAR_GRADIENT" || f.type === "RADIAL_GRADIENT") {
     const result = {
       type: f.type,
-      stops: f.gradientStops.map((s) => ({
-        position: s.position,
-        r: Math.round(s.color.r * 255),
-        g: Math.round(s.color.g * 255),
-        b: Math.round(s.color.b * 255),
-        opacity: s.color.a,
-      })),
+      stops: f.gradientStops.map((s) => {
+        const stop = { pos: s.position, color: toHex(s.color.r, s.color.g, s.color.b) };
+        if (s.color.a < 1) stop.opacity = s.color.a;
+        return stop;
+      }),
     };
     if (f.gradientTransform) {
       const [[a, , tx], [c, , ty]] = f.gradientTransform;
-      result.gradientHandlePositions = [
-        { x: Math.round(tx * 1000) / 1000, y: Math.round(ty * 1000) / 1000 },
-        { x: Math.round((tx + a) * 1000) / 1000, y: Math.round((ty + c) * 1000) / 1000 },
+      result.handles = [
+        [Math.round(tx * 1000) / 1000, Math.round(ty * 1000) / 1000],
+        [Math.round((tx + a) * 1000) / 1000, Math.round((ty + c) * 1000) / 1000],
       ];
     }
     return result;
@@ -82,19 +67,12 @@ function extractFills(node) {
 /** @param {SceneNode} node */
 function extractStrokes(node) {
   if (!("strokes" in node) || !Array.isArray(node.strokes) || node.strokes.length === 0) return null;
-  const data = {
-    strokes: node.strokes
-      .filter((s) => s.type === "SOLID")
-      .map((s) => ({
-        type: "SOLID",
-        r: Math.round(s.color.r * 255),
-        g: Math.round(s.color.g * 255),
-        b: Math.round(s.color.b * 255),
-        opacity: s.opacity,
-      })),
-  };
-  if ("strokeWeight" in node) data.strokeWeight = node.strokeWeight;
-  if ("strokeAlign" in node) data.strokeAlign = node.strokeAlign;
+  const colors = node.strokes
+    .filter((s) => s.type === "SOLID")
+    .map((s) => toHex(s.color.r, s.color.g, s.color.b));
+  if (colors.length === 0) return null;
+  const data = { stroke: colors.length === 1 ? colors[0] : colors };
+  if ("strokeWeight" in node) data.strokeW = node.strokeWeight;
   return data;
 }
 
@@ -115,17 +93,10 @@ function extractEffects(node) {
     .filter((e) => e.visible !== false)
     .map((e) => {
       if (e.type === "DROP_SHADOW" || e.type === "INNER_SHADOW") {
-        return {
-          type: e.type,
-          offsetX: e.offset.x,
-          offsetY: e.offset.y,
-          blur: e.radius,
-          spread: e.spread || 0,
-          r: Math.round(e.color.r * 255),
-          g: Math.round(e.color.g * 255),
-          b: Math.round(e.color.b * 255),
-          opacity: e.color.a,
-        };
+        const d = { type: e.type, x: e.offset.x, y: e.offset.y, blur: e.radius, color: toHex(e.color.r, e.color.g, e.color.b) };
+        if (e.spread) d.spread = e.spread;
+        if (e.color.a < 1) d.opacity = e.color.a;
+        return d;
       }
       if (e.type === "LAYER_BLUR" || e.type === "BACKGROUND_BLUR") {
         return { type: e.type, blur: e.radius };
@@ -167,32 +138,22 @@ function extractCornerRadius(node) {
 /** @param {SceneNode} node */
 function extractAutoLayout(node) {
   if (!("layoutMode" in node) || node.layoutMode === "NONE") return null;
-  const data = {
-    layoutMode: node.layoutMode,
-    itemSpacing: node.itemSpacing,
-    paddingLeft: node.paddingLeft,
-    paddingRight: node.paddingRight,
-    paddingTop: node.paddingTop,
-    paddingBottom: node.paddingBottom,
-  };
-  if ("primaryAxisAlignItems" in node) data.primaryAxisAlignItems = node.primaryAxisAlignItems;
-  if ("counterAxisAlignItems" in node) data.counterAxisAlignItems = node.counterAxisAlignItems;
-  if ("primaryAxisSizingMode" in node) data.primaryAxisSizingMode = node.primaryAxisSizingMode;
-  if ("counterAxisSizingMode" in node) data.counterAxisSizingMode = node.counterAxisSizingMode;
+  const data = { layout: node.layoutMode };
+  if (node.itemSpacing) data.gap = node.itemSpacing;
+  const p = [node.paddingTop || 0, node.paddingRight || 0, node.paddingBottom || 0, node.paddingLeft || 0];
+  if (p.some((v) => v > 0)) data.padding = p;
+  if ("primaryAxisAlignItems" in node) data.mainAlign = node.primaryAxisAlignItems;
+  if ("counterAxisAlignItems" in node) data.crossAlign = node.counterAxisAlignItems;
+  if ("primaryAxisSizingMode" in node) data.mainSize = node.primaryAxisSizingMode;
+  if ("counterAxisSizingMode" in node) data.crossSize = node.counterAxisSizingMode;
   return data;
 }
 
 /** @param {SceneNode} node */
 function extractConstraints(node) {
   const data = {};
-  if ("constraints" in node) {
-    data.constraints = {
-      horizontal: node.constraints.horizontal,
-      vertical: node.constraints.vertical,
-    };
-  }
-  if ("layoutSizingHorizontal" in node) data.layoutSizingHorizontal = node.layoutSizingHorizontal;
-  if ("layoutSizingVertical" in node) data.layoutSizingVertical = node.layoutSizingVertical;
+  if ("layoutSizingHorizontal" in node) data.sizingH = node.layoutSizingHorizontal;
+  if ("layoutSizingVertical" in node) data.sizingV = node.layoutSizingVertical;
   return Object.keys(data).length > 0 ? data : null;
 }
 
@@ -217,7 +178,7 @@ function extractStyles(node) {
 const PROFILES = {
   summary: [extractBase, extractGeometry],
   codegen: [
-    extractBase, extractGeometry, extractParent, extractFills,
+    extractBase, extractGeometry, extractFills,
     extractStrokes, extractText, extractEffects, extractTransform,
     extractCornerRadius, extractAutoLayout, extractConstraints, extractStyles,
   ],

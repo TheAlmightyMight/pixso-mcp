@@ -143,26 +143,26 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
       case "get_selection": {
         const data = await callPlugin("getSelection");
         return {
-          content: [{ type: "text", text: JSON.stringify(data, null, 2) }],
+          content: [{ type: "text", text: JSON.stringify(data) }],
         };
       }
       case "list_layers": {
         const data = await callPlugin("listLayers");
         return {
-          content: [{ type: "text", text: JSON.stringify(data, null, 2) }],
+          content: [{ type: "text", text: JSON.stringify(data) }],
         };
       }
       case "get_node_details": {
         const { nodeId } = z.object({ nodeId: z.string() }).parse(args);
         const data = await callPlugin("getNodeDetails", { nodeId });
         return {
-          content: [{ type: "text", text: JSON.stringify(data, null, 2) }],
+          content: [{ type: "text", text: JSON.stringify(data) }],
         };
       }
       case "list_design_tokens": {
         const data = await callPlugin("listDesignTokens");
         return {
-          content: [{ type: "text", text: JSON.stringify(data, null, 2) }],
+          content: [{ type: "text", text: JSON.stringify(data) }],
         };
       }
       default:
