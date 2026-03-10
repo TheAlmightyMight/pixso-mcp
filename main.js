@@ -35,8 +35,22 @@ function serializeNode(node, detailed = false) {
 
   // Детализация по запросу
   if (detailed) {
+    // 1. Стили и переменные (Design Tokens)
+    if ("fillStyleId" in node && node.fillStyleId) {
+      const style = pixso.getStyleById(node.fillStyleId);
+      if (style) data.fillStyleName = style.name;
+    }
+    if ("strokeStyleId" in node && node.strokeStyleId) {
+      const style = pixso.getStyleById(node.strokeStyleId);
+      if (style) data.strokeStyleName = style.name;
+    }
+    if (node.type === "TEXT" && "textStyleId" in node && node.textStyleId) {
+      const style = pixso.getStyleById(node.textStyleId);
+      if (style) data.textStyleName = style.name;
+    }
+
+    // 2. Цвет заливки (Fills)
     if ("fills" in node && Array.isArray(node.fills)) {
-      // Упрощаем цвета (только SOLID)
       data.colors = node.fills
         .filter((f) => f.type === "SOLID")
         .map((f) => ({
@@ -46,10 +60,47 @@ function serializeNode(node, detailed = false) {
           opacity: f.opacity,
         }));
     }
+
+    // 2. Рамки (Strokes)
+    if ("strokes" in node && Array.isArray(node.strokes) && node.strokes.length > 0) {
+      data.strokes = node.strokes
+        .filter((s) => s.type === "SOLID")
+        .map((s) => ({
+          r: Math.round(s.color.r * 255),
+          g: Math.round(s.color.g * 255),
+          b: Math.round(s.color.b * 255),
+          opacity: s.opacity,
+        }));
+      if ("strokeWeight" in node) data.strokeWeight = node.strokeWeight;
+      if ("strokeAlign" in node) data.strokeAlign = node.strokeAlign;
+    }
+
+    // 3. Скругления углов (Radius)
+    if ("cornerRadius" in node && node.cornerRadius !== pixso.mixed) {
+      if (node.cornerRadius !== 0) data.cornerRadius = node.cornerRadius;
+    } else {
+      if ("topLeftRadius" in node) data.topLeftRadius = node.topLeftRadius;
+      if ("topRightRadius" in node) data.topRightRadius = node.topRightRadius;
+      if ("bottomLeftRadius" in node) data.bottomLeftRadius = node.bottomLeftRadius;
+      if ("bottomRightRadius" in node) data.bottomRightRadius = node.bottomRightRadius;
+    }
+
+    // 4. Комновка (Auto Layout)
+    if ("layoutMode" in node && node.layoutMode !== "NONE") {
+      data.layoutMode = node.layoutMode;
+      data.itemSpacing = node.itemSpacing;
+      data.paddingLeft = node.paddingLeft;
+      data.paddingRight = node.paddingRight;
+      data.paddingTop = node.paddingTop;
+      data.paddingBottom = node.paddingBottom;
+      if ("primaryAxisAlignItems" in node) data.primaryAxisAlignItems = node.primaryAxisAlignItems;
+      if ("counterAxisAlignItems" in node) data.counterAxisAlignItems = node.counterAxisAlignItems;
+      if ("primaryAxisSizingMode" in node) data.primaryAxisSizingMode = node.primaryAxisSizingMode;
+      if ("counterAxisSizingMode" in node) data.counterAxisSizingMode = node.counterAxisSizingMode;
+    }
     
-    // Рекурсивный обход детей (если есть)
+    // 5. Рекурсивный обход детей (если есть)
     if ("children" in node && node.children.length > 0) {
-      // Для детального просмотра возвращаем только ID детей
       data.childrenIds = node.children.map((c) => c.id);
     }
   }
@@ -89,6 +140,14 @@ pixso.ui.onmessage = async (msg) => {
         } else {
           payload = { error: "Node not found" };
         }
+        break;
+      }
+
+      case "listDesignTokens": {
+        // Список всех стилей в документе (Design Tokens)
+        const paintStyles = pixso.getLocalPaintStyles().map(s => ({ id: s.id, name: s.name, type: "PAINT", description: s.description }));
+        const textStyles = pixso.getLocalTextStyles().map(s => ({ id: s.id, name: s.name, type: "TEXT", description: s.description }));
+        payload = { paintStyles, textStyles };
         break;
       }
 
