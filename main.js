@@ -108,6 +108,47 @@ function extractText(node) {
   return data;
 }
 
+/** @param {SceneNode} node */
+function extractEffects(node) {
+  if (!("effects" in node) || !Array.isArray(node.effects)) return null;
+  const effects = node.effects
+    .filter((e) => e.visible !== false)
+    .map((e) => {
+      if (e.type === "DROP_SHADOW" || e.type === "INNER_SHADOW") {
+        return {
+          type: e.type,
+          offsetX: e.offset.x,
+          offsetY: e.offset.y,
+          blur: e.radius,
+          spread: e.spread || 0,
+          r: Math.round(e.color.r * 255),
+          g: Math.round(e.color.g * 255),
+          b: Math.round(e.color.b * 255),
+          opacity: e.color.a,
+        };
+      }
+      if (e.type === "LAYER_BLUR" || e.type === "BACKGROUND_BLUR") {
+        return { type: e.type, blur: e.radius };
+      }
+      return null;
+    })
+    .filter(Boolean);
+  return effects.length > 0 ? { effects } : null;
+}
+
+/** @param {SceneNode} node */
+function extractTransform(node) {
+  const result = {};
+  if ("opacity" in node && node.opacity < 1) result.opacity = node.opacity;
+  if ("rotation" in node && node.rotation !== 0) {
+    result.rotation = Math.round(node.rotation * 10) / 10;
+  }
+  if ("blendMode" in node && node.blendMode !== "PASS_THROUGH" && node.blendMode !== "NORMAL") {
+    result.blendMode = node.blendMode;
+  }
+  return Object.keys(result).length > 0 ? result : null;
+}
+
 /**
  * Сериализация узла Pixso с фильтрацией свойств для экономии токенов.
  * @param {SceneNode} node - Узел Pixso.
