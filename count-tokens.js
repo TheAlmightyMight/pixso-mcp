@@ -52,12 +52,11 @@ wss.on("connection", (ws) => {
         // Log to console
         lines.forEach(line => console.log(line));
 
-        // Write to file
+        // Save JSON to file
         const timestamp = new Date().toISOString().replace(/[:.]/g, "-");
-        const filename = `token-report-${timestamp}.txt`;
-        const filepath = `${testResultsDir}/${filename}`;
-        fs.writeFileSync(filepath, lines.join("\n"));
-        console.log(`\nResults saved to ${filepath}`);
+        const jsonFilename = `selection-${timestamp}.json`;
+        const jsonFilepath = `${testResultsDir}/${jsonFilename}`;
+        fs.writeFileSync(jsonFilepath, jsonPretty);
 
         ws.close();
         wss.close();
