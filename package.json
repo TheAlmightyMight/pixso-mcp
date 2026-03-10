@@ -3,9 +3,9 @@
   "version": "1.0.0",
   "type": "module",
   "description": "MCP server for Pixso design tool",
-  "main": "index.js",
+  "main": "server/index.js",
   "scripts": {
-    "start": "node index.js",
+    "start": "node server/index.js",
     "count-tokens": "node count-tokens.js",
     "typecheck": "tsc --noEmit",
     "lint:all": "eslint ."
