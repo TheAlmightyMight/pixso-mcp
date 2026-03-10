@@ -39,6 +39,75 @@ function extractParent(node) {
   };
 }
 
+function serializeFill(f) {
+  if (f.type === "SOLID") {
+    return {
+      type: "SOLID",
+      r: Math.round(f.color.r * 255),
+      g: Math.round(f.color.g * 255),
+      b: Math.round(f.color.b * 255),
+      opacity: f.opacity,
+    };
+  }
+  if (f.type === "LINEAR_GRADIENT" || f.type === "RADIAL_GRADIENT") {
+    const result = {
+      type: f.type,
+      stops: f.gradientStops.map((s) => ({
+        position: s.position,
+        r: Math.round(s.color.r * 255),
+        g: Math.round(s.color.g * 255),
+        b: Math.round(s.color.b * 255),
+        opacity: s.color.a,
+      })),
+    };
+    if (f.gradientTransform) {
+      const [[a, , tx], [c, , ty]] = f.gradientTransform;
+      result.gradientHandlePositions = [
+        { x: Math.round(tx * 1000) / 1000, y: Math.round(ty * 1000) / 1000 },
+        { x: Math.round((tx + a) * 1000) / 1000, y: Math.round((ty + c) * 1000) / 1000 },
+      ];
+    }
+    return result;
+  }
+  return null;
+}
+
+/** @param {SceneNode} node */
+function extractFills(node) {
+  if (!("fills" in node) || !Array.isArray(node.fills)) return null;
+  const fills = node.fills.map(serializeFill).filter(Boolean);
+  return fills.length > 0 ? { fills } : null;
+}
+
+/** @param {SceneNode} node */
+function extractStrokes(node) {
+  if (!("strokes" in node) || !Array.isArray(node.strokes) || node.strokes.length === 0) return null;
+  const data = {
+    strokes: node.strokes
+      .filter((s) => s.type === "SOLID")
+      .map((s) => ({
+        type: "SOLID",
+        r: Math.round(s.color.r * 255),
+        g: Math.round(s.color.g * 255),
+        b: Math.round(s.color.b * 255),
+        opacity: s.opacity,
+      })),
+  };
+  if ("strokeWeight" in node) data.strokeWeight = node.strokeWeight;
+  if ("strokeAlign" in node) data.strokeAlign = node.strokeAlign;
+  return data;
+}
+
+/** @param {SceneNode} node */
+function extractText(node) {
+  if (node.type !== "TEXT") return null;
+  const data = { text: node.characters };
+  if ("fontSize" in node && node.fontSize !== pixso.mixed) {
+    data.fontSize = node.fontSize;
+  }
+  return data;
+}
+
 /**
  * Сериализация узла Pixso с фильтрацией свойств для экономии токенов.
  * @param {SceneNode} node - Узел Pixso.
