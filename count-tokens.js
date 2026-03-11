@@ -2,26 +2,26 @@ import { WebSocketServer } from "ws";
 import fs from "fs";
 
 /**
- * Connects to the Pixso plugin via WebSocket, fetches the current selection,
- * and reports the token count. Outputs the result to test_results folder.
+ * Подключается к плагину Pixso через WebSocket, запрашивает текущее выделение
+ * и сообщает количество токенов. Выводит результат в папку test_results.
  *
- * Usage: node count-tokens.js
- * (Make sure index.js is NOT running — this script uses the same port)
+ * Использование: node count-tokens.js
+ * (Убедитесь, что index.js НЕ запущен — этот скрипт использует тот же порт)
  */
 
 const PORT = 3667;
 const wss = new WebSocketServer({ port: PORT });
 const testResultsDir = "test_results";
 
-// Create test_results directory if it doesn't exist
+// Создаем папку test_results, если она не существует
 if (!fs.existsSync(testResultsDir)) {
   fs.mkdirSync(testResultsDir, { recursive: true });
 }
 
-console.log(`Waiting for Pixso plugin to connect on ws://localhost:${PORT}...`);
+console.log(`Ожидание подключения плагина Pixso на ws://localhost:${PORT}...`);
 
 wss.on("connection", (ws) => {
-  console.log("Plugin connected. Requesting selection...\n");
+  console.log("Плагин подключен. Запрос выделения...\n");
 
   const id = "token-count-" + Date.now();
 
@@ -29,7 +29,7 @@ wss.on("connection", (ws) => {
     JSON.stringify({
       id,
       type: "request",
-      command: "listDesignTokens",
+      command: "getSelection",
       params: {},
     }),
   );
@@ -41,29 +41,29 @@ wss.on("connection", (ws) => {
         const json = JSON.stringify(msg.payload);
         const jsonPretty = JSON.stringify(msg.payload, null, 2);
 
-        // Count nodes
+        // Считаем узлы
         const nodeCount = (json.match(/"id":/g) || []).length;
 
-        // Token estimation: ~4 chars per token for JSON (conservative)
+        // Оценка токенов: ~4 символа на токен для JSON (консервативно)
         const estimatedTokens = Math.ceil(json.length / 4);
 
-        // Build report
+        // Сбор отчета
         const lines = [];
-        lines.push("=== Token Report ===");
-        lines.push(`Nodes:            ${nodeCount}`);
-        lines.push(`JSON chars:       ${json.length.toLocaleString()}`);
-        lines.push(`Estimated tokens: ~${estimatedTokens.toLocaleString()}`);
+        lines.push("=== Отчет по токенам ===");
+        lines.push(`Узлов:            ${nodeCount}`);
+        lines.push(`Символов JSON:    ${json.length.toLocaleString()}`);
+        lines.push(`Оценка токенов:   ~${estimatedTokens.toLocaleString()}`);
         lines.push(
-          `Pretty chars:     ${jsonPretty.length.toLocaleString()} (if using indent)`,
+          `Символов (pretty): ${jsonPretty.length.toLocaleString()} (с отступами)`,
         );
         lines.push(
-          `Pretty tokens:    ~${Math.ceil(jsonPretty.length / 4).toLocaleString()} (if using indent)`,
+          `Токенов (pretty):  ~${Math.ceil(jsonPretty.length / 4).toLocaleString()} (с отступами)`,
         );
 
-        // Log to console
+        // Вывод в консоль
         lines.forEach((line) => console.log(line));
 
-        // Save JSON to file
+        // Сохранение JSON в файл
         const timestamp = new Date().toISOString().replace(/[:.]/g, "-");
         const jsonFilename = `selection-${timestamp}.json`;
         const jsonFilepath = `${testResultsDir}/${jsonFilename}`;
@@ -74,20 +74,20 @@ wss.on("connection", (ws) => {
         process.exit(0);
       }
     } catch (err) {
-      console.error("Error parsing response:", err);
+      console.error("Ошибка парсинга ответа:", err);
     }
   });
 
   ws.on("close", () => {
-    console.log("Plugin disconnected.");
+    console.log("Плагин отключен.");
     wss.close();
     process.exit(1);
   });
 });
 
-// Timeout after 15s
+// Таймаут через 15с
 setTimeout(() => {
-  console.error("Timeout: no plugin connected within 15 seconds.");
+  console.error("Таймаут: плагин не подключился в течение 15 секунд.");
   wss.close();
   process.exit(1);
 }, 15000);

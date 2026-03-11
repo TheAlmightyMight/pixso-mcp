@@ -179,22 +179,7 @@ function stripStylePrefix(name) {
   return name.replace(/^(light|dark)\//i, "");
 }
 
-// Valid color token prefixes based on tokens.js
-const VALID_COLOR_PREFIXES = [
-  "bg", "surface", "outlines",
-  "Text/", "Blue/", "Red/", "Green/", "Orange/", "Lavander/", "BW Scale/",
-  "Monochrome/", "Basic/", "Brand/", "MI/",
-  "Success/", "Error/", "Other/", "Platform/", "Private/",
-  "Theme Free/", "Gradient/",
-];
-
-function isValidColorToken(name) {
-  const stripped = name.replace(/^(light|dark)\//i, "");
-  return VALID_COLOR_PREFIXES.some(p => stripped.startsWith(p));
-}
-
 const PROFILES = {
-  summary: [extractBase, extractGeometry],
   codegen: [
     extractBase, extractGeometry, extractFills,
     extractStrokes, extractText, extractEffects, extractTransform,
@@ -202,7 +187,7 @@ const PROFILES = {
   ],
 };
 
-function serializeNode(node, profile = "summary") {
+function serializeNode(node, profile = "codegen") {
   const extractors = PROFILES[profile];
   return Object.assign({}, ...extractors.map((fn) => fn(node) || {}));
 }
@@ -242,31 +227,6 @@ pixso.ui.onmessage = async (msg) => {
         if (totalCount > 200) {
           payload._warning = `Large selection: ${totalCount} nodes`;
         }
-        break;
-      }
-
-      case "listLayers": {
-        payload = pixso.currentPage.children.map((node) => serializeNode(node, "summary"));
-        break;
-      }
-
-      case "getNodeDetails": {
-        const node = pixso.getNodeById(params.nodeId);
-        if (node) {
-          payload = serializeNode(node, "codegen");
-        } else {
-          payload = { error: "Node not found" };
-        }
-        break;
-      }
-
-      case "listDesignTokens": {
-        // Список всех стилей в документе (Design Tokens)
-        const paintStyles = pixso.getLocalPaintStyles()
-          .filter(s => isValidColorToken(s.name))
-          .map(s => ({ id: s.id, name: stripStylePrefix(s.name), type: "PAINT", description: s.description }));
-        const textStyles = pixso.getLocalTextStyles().map(s => ({ id: s.id, name: stripStylePrefix(s.name), type: "TEXT", description: s.description }));
-        payload = { paintStyles, textStyles };
         break;
       }
 
