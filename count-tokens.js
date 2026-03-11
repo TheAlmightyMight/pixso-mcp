@@ -3,7 +3,7 @@ import fs from "fs";
 
 /**
  * Подключается к плагину Pixso через WebSocket, запрашивает текущее выделение
- * и сообщает количество токенов. Выводит результат в папку test_results.
+ * и сообщает количество токенов. Выводит результат в папку __tests__/test_results.
  *
  * Использование: node count-tokens.js
  * (Убедитесь, что index.js НЕ запущен — этот скрипт использует тот же порт)
@@ -11,7 +11,7 @@ import fs from "fs";
 
 const PORT = 3667;
 const wss = new WebSocketServer({ port: PORT });
-const testResultsDir = "test_results";
+const testResultsDir = "__tests__/test_results";
 
 // Создаем папку test_results, если она не существует
 if (!fs.existsSync(testResultsDir)) {
@@ -64,9 +64,10 @@ wss.on("connection", (ws) => {
         lines.forEach((line) => console.log(line));
 
         // Сохранение JSON в файл
-        const timestamp = new Date()
-          .toLocaleDateString("ru-RU")
-          .replace(/\./g, "-");
+        const now = new Date();
+        const date = now.toLocaleDateString("ru-RU").replace(/\./g, "-");
+        const time = now.toLocaleTimeString("ru-RU").replace(/:/g, "-");
+        const timestamp = `${date}_${time}`;
         const jsonFilename = `selection-${timestamp}.json`;
         const jsonFilepath = `${testResultsDir}/${jsonFilename}`;
         fs.writeFileSync(jsonFilepath, jsonPretty);
