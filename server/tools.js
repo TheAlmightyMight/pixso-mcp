@@ -10,7 +10,7 @@ export const toolDefinitions = [
       "strokeAlign: INSIDE=border, OUTSIDE=outline/box-shadow, CENTER=split half inside/half outside. " +
       "fills[].handles: two [x,y] points in 0-1 space for gradient direction. " +
       "Pre-normalized values: layout=row/column, mainAlign=flex-start/flex-end/center/space-between, crossAlign=flex-start/flex-end/center, layoutAlign=stretch, textAlign=left/right/center/justify, textDecoration=underline/line-through, textCase=uppercase/lowercase/capitalize, overflow=x/y/both, padding=[top,right,bottom,left], gradient types=linear/radial/conic/diamond. " +
-      "When fillStyleName, strokeStyleName, or textStyleName present, raw values (colors, fonts) omitted—use token name for design system lookup. " +
+      "When fillStyleName, strokeStyleName, or textStyleName present, raw values (colors, fonts) omitted—infer design system token mapping by matching fillStyleName and textStyleName against @kpmi/lumen/styles.css based on similarity. " +
       "All spacing and dimension values (padding, gap, x, y, w, h, etc.) are in pixels.",
     inputSchema: {
       type: "object",
