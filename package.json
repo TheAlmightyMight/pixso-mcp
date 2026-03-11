@@ -8,7 +8,8 @@
     "start": "node server/index.js",
     "count-tokens": "node count-tokens.js",
     "typecheck": "tsc --noEmit",
-    "lint:all": "eslint ."
+    "lint:all": "eslint .",
+    "dev": "cd __tests__/test-app && npm run dev"
   },
   "dependencies": {
     "@modelcontextprotocol/sdk": "^1.0.1",
