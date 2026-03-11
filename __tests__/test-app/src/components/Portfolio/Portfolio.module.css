@@ -1,0 +1,252 @@
+.container {
+  width: 100%;
+  max-width: 800px;
+  padding: 20px;
+  background: #fff;
+  border-radius: 12px;
+}
+
+/* Main Block */
+.block {
+  display: flex;
+  gap: 16px;
+  padding: 24px;
+  background: linear-gradient(135deg, #f8f9fa 0%, #ffffff 100%);
+  border-radius: 24px;
+  align-items: flex-start;
+  justify-content: space-between;
+  border: 1px solid #e8e8e8;
+  flex-wrap: wrap;
+}
+
+@media (max-width: 768px) {
+  .block {
+    flex-direction: column;
+    align-items: stretch;
+  }
+}
+
+/* Account Section */
+.accountSection {
+  flex: 1;
+  min-width: 300px;
+}
+
+.accountFrame {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+}
+
+.accountTitle {
+  font-size: 14px;
+  font-weight: 500;
+  color: #999;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+  margin-bottom: 8px;
+}
+
+.detailsRows {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.row {
+  display: flex;
+  gap: 8px;
+  align-items: center;
+}
+
+.balance {
+  font-size: 32px;
+  font-weight: 600;
+  color: #1a1a1a;
+  line-height: 1;
+}
+
+/* P&L Badge */
+.pnlBadge {
+  display: inline-flex;
+  gap: 4px;
+  align-items: center;
+  padding: 4px 8px;
+  background: rgba(34, 177, 76, 0.15);
+  border-radius: 8px;
+  max-width: fit-content;
+}
+
+.pnlIcon {
+  color: #22b14c;
+  flex-shrink: 0;
+}
+
+.pnlText {
+  font-size: 13px;
+  font-weight: 500;
+  color: #22b14c;
+  white-space: nowrap;
+}
+
+/* Button Group */
+.buttonGroup {
+  display: flex;
+  gap: 8px;
+  align-items: center;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+}
+
+@media (max-width: 768px) {
+  .buttonGroup {
+    width: 100%;
+    justify-content: stretch;
+  }
+
+  .buttonGroup button {
+    flex: 1;
+  }
+}
+
+/* Primary Button (Top Up) */
+.buttonPrimary {
+  display: flex;
+  gap: 4px;
+  align-items: center;
+  padding: 12px 18px;
+  background: #3498db;
+  color: #ffffff;
+  border: none;
+  border-radius: 12px;
+  font-size: 13px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: all 0.2s ease;
+  min-width: 110px;
+  justify-content: center;
+}
+
+.buttonPrimary:hover {
+  background: #2980b9;
+  transform: translateY(-2px);
+  box-shadow: 0 4px 12px rgba(52, 152, 219, 0.3);
+}
+
+.buttonPrimary:active {
+  transform: translateY(0);
+  box-shadow: 0 2px 6px rgba(52, 152, 219, 0.2);
+}
+
+/* Secondary Button (Withdraw) */
+.buttonSecondary {
+  display: flex;
+  gap: 4px;
+  align-items: center;
+  padding: 12px 18px;
+  background: rgba(52, 152, 219, 0.1);
+  color: #3498db;
+  border: 1px solid rgba(52, 152, 219, 0.2);
+  border-radius: 12px;
+  font-size: 13px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: all 0.2s ease;
+  min-width: 110px;
+  justify-content: center;
+}
+
+.buttonSecondary:hover {
+  background: rgba(52, 152, 219, 0.15);
+  border-color: #3498db;
+  transform: translateY(-2px);
+  box-shadow: 0 4px 12px rgba(52, 152, 219, 0.15);
+}
+
+.buttonSecondary:active {
+  transform: translateY(0);
+  box-shadow: 0 2px 6px rgba(52, 152, 219, 0.1);
+}
+
+.buttonIcon {
+  width: 16px;
+  height: 16px;
+  flex-shrink: 0;
+}
+
+/* Footer & Details */
+.footer {
+  margin-top: 16px;
+  padding-top: 16px;
+  border-top: 1px solid #f0f0f0;
+}
+
+.detailsToggle {
+  background: none;
+  border: none;
+  color: #3498db;
+  font-size: 12px;
+  font-weight: 600;
+  cursor: pointer;
+  padding: 0;
+  text-decoration: underline;
+  transition: color 0.2s ease;
+}
+
+.detailsToggle:hover {
+  color: #2980b9;
+}
+
+.detailsPanel {
+  margin-top: 12px;
+  padding: 12px;
+  background: #f8f9fa;
+  border-radius: 8px;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.detailItem {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  font-size: 13px;
+}
+
+.detailItem label {
+  color: #666;
+  font-weight: 500;
+}
+
+.detailItem value {
+  color: #1a1a1a;
+  font-weight: 600;
+}
+
+.positive {
+  color: #22b14c;
+  font-weight: 600;
+}
+
+/* Responsive Typography */
+@media (max-width: 480px) {
+  .balance {
+    font-size: 24px;
+  }
+
+  .accountTitle {
+    font-size: 12px;
+  }
+
+  .pnlText {
+    font-size: 12px;
+  }
+
+  .buttonPrimary,
+  .buttonSecondary {
+    padding: 10px 12px;
+    font-size: 12px;
+    min-width: auto;
+  }
+}
