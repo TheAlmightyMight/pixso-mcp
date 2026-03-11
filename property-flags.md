@@ -17,7 +17,7 @@ Four possible flags:
 | 5 | `w` | Geometry | Dimensions are fundamental to layout |
 | 6 | `h` | Geometry | Dimensions are fundamental to layout |
 
-## P — If Present (43)
+## P — If Present (48)
 
 | # | Property | Category | Emit when |
 |---|---|---|---|
@@ -29,7 +29,7 @@ Four possible flags:
 | 12 | `fills[].scaleMode` | Fills | Image fill (`FILL` / `FIT` / `CROP` / `TILE`) |
 | 13 | `strokeW` | Strokes | Strokes exist |
 | 14 | `strokeAlign` | Strokes | Strokes exist (`INSIDE` / `OUTSIDE` / `CENTER`) |
-| 15 | `individualStrokeWeights` | Strokes | Weights differ per side |
+| 15 | `strokeTopWeight` / `strokeBottomWeight` / `strokeLeftWeight` / `strokeRightWeight` | Strokes | Any value differs from `strokeWeight` |
 | 16 | `text` | Text | TEXT nodes |
 | 17 | `textAlignHorizontal` | Text | Not `LEFT` (`CENTER` / `RIGHT` / `JUSTIFIED`) |
 | 18 | `textAlignVertical` | Text | Not `TOP` (`CENTER` / `BOTTOM`) |
@@ -68,44 +68,96 @@ Four possible flags:
 | 51 | `fillStyleName` | Styles | Fill style applied |
 | 52 | `strokeStyleName` | Styles | Stroke style applied |
 | 53 | `textStyleName` | Styles | Text style applied |
+| 54 | `boundVariables` | Variables | Any variable bound; resolve to `variable.name` + `codeSyntax.WEB` for CSS/Tailwind tokens |
 
 ## C — Conditional (7)
 
 | # | Property | Category | Condition | Rationale |
 |---|---|---|---|---|
-| 54 | `fills[].color` | Fills | No `fillStyleName` | Raw color redundant when design token exists |
-| 55 | `stroke` | Strokes | No `strokeStyleName` | Raw color redundant when design token exists |
-| 56 | `fontSize` | Text | No `textStyleName` | Raw size redundant when text token exists |
-| 57 | `fontName.family` | Text | No `textStyleName` | Font family redundant when text token exists |
-| 58 | `fontName.style` | Text | No `textStyleName` | Font weight/style redundant when text token exists |
-| 59 | `lineHeight` | Text | No `textStyleName` | Line height redundant when text token exists |
-| 60 | `letterSpacing` | Text | No `textStyleName` | Letter spacing redundant when text token exists |
+| 56 | `fills[].color` | Fills | No `fillStyleName` | Raw color redundant when design token exists |
+| 57 | `stroke` | Strokes | No `strokeStyleName` | Raw color redundant when design token exists |
+| 58 | `fontSize` | Text | No `textStyleName` | Raw size redundant when text token exists |
+| 59 | `fontName.family` | Text | No `textStyleName` | Font family redundant when text token exists |
+| 60 | `fontName.style` | Text | No `textStyleName` | Font weight/style redundant when text token exists |
+| 61 | `lineHeight` | Text | No `textStyleName` | Line height redundant when text token exists |
+| 62 | `letterSpacing` | Text | No `textStyleName` | Letter spacing redundant when text token exists |
 
-## N — Never (24)
+## N — Never (25)
 
 | # | Property | Category | Rationale |
 |---|---|---|---|
-| 61 | `id` | Base | No tool consumes it; `name` suffices for identification |
-| 62 | `visible` | Base | Hidden nodes skipped from tree entirely |
-| 63 | `blendMode` | Transform | Too rare in typical UI; artistic effect |
-| 64 | `paragraphSpacing` | Text | Rarely needed in codegen |
-| 65 | `paragraphIndent` | Text | Rarely used |
-| 66 | `hyperlink` | Text | Rarely present |
-| 67 | `strokeDashPattern` | Strokes | CSS dashed can't replicate exact pattern |
-| 68 | `strokeCap` | Strokes | SVG-only; irrelevant for CSS |
-| 69 | `strokeJoin` | Strokes | SVG-only; irrelevant for CSS |
-| 70 | `strokeMiterLimit` | Strokes | SVG-only; irrelevant for CSS |
-| 71 | `preserveRatio` | Layout | Redundant when w/h provided |
-| 72 | `fills[].imageTransform` | Fills | Complex matrix; not actionable for CSS |
-| 73 | `fills[].visible` | Fills | Skip invisible fills during serialization instead |
-| 74 | `effectStyleId` | Effects | Not using effect tokens in design system |
-| 75 | `componentId` / `mainComponent` | Component | LLM can infer reuse from names |
-| 76 | `variantProperties` | Component | Verbose, design-system-specific |
-| 77 | `componentProperties` | Component | Instance overrides; too verbose |
-| 78 | `absoluteBoundingBox` | Geometry | Page coords; no CSS mapping |
-| 79 | `relativeTransform` | Geometry | Full 2D matrix; too complex |
-| 80 | `isMask` | Geometry | Masking; rare in CSS codegen |
-| 81 | `booleanOperation` | Geometry | Vector operations; no CSS mapping |
-| 82 | `exportSettings` | Other | Export presets; design-only |
-| 83 | `layoutGrids` | Other | Grid overlays; design-only |
-| 84 | `guides` | Other | Ruler guides; design-only |
+| 63 | `id` | Base | No tool consumes it; `name` suffices for identification |
+| 64 | `visible` | Base | Hidden nodes skipped from tree entirely |
+| 65 | `blendMode` | Transform | Too rare in typical UI; artistic effect |
+| 66 | `paragraphSpacing` | Text | Rarely needed in codegen |
+| 67 | `paragraphIndent` | Text | Rarely used |
+| 68 | `hyperlink` | Text | Rarely present |
+| 69 | `strokeDashPattern` | Strokes | CSS dashed can't replicate exact pattern |
+| 70 | `strokeCap` | Strokes | SVG-only; irrelevant for CSS |
+| 71 | `strokeJoin` | Strokes | SVG-only; irrelevant for CSS |
+| 72 | `strokeMiterLimit` | Strokes | SVG-only; irrelevant for CSS |
+| 73 | `preserveRatio` | Layout | Redundant when w/h provided |
+| 74 | `fills[].imageTransform` | Fills | Complex matrix; not actionable for CSS |
+| 75 | `fills[].visible` | Fills | Skip invisible fills during serialization instead |
+| 76 | `effectStyleId` | Effects | Not using effect tokens in design system |
+| 77 | `componentId` / `mainComponent` | Component | LLM can infer reuse from names |
+| 78 | `variantProperties` | Component | Verbose, design-system-specific |
+| 79 | `componentProperties` | Component | Instance overrides; too verbose |
+| 80 | `absoluteBoundingBox` | Geometry | Page coords; no CSS mapping |
+| 81 | `relativeTransform` | Geometry | Full 2D matrix; too complex |
+| 82 | `isMask` | Geometry | Masking; rare in CSS codegen |
+| 83 | `booleanOperation` | Geometry | Vector operations; no CSS mapping |
+| 84 | `exportSettings` | Other | Export presets; design-only |
+| 85 | `layoutGrids` | Other | Grid overlays; design-only |
+| 86 | `guides` | Other | Ruler guides; design-only |
+| 87 | `cornerSmoothing` | Corner Radius | No CSS equivalent; not actionable for codegen |
+
+---
+
+## Value Normalization Strategy
+
+Some Pixso enum values don't map intuitively to CSS. Strategy: **normalize easy mappings in the plugin** (LLM never sees Pixso enums), **attach a reference** for complex ones.
+
+### Normalize in plugin (emit CSS values directly)
+
+| Pixso value | Emit as | CSS target |
+|---|---|---|
+| `mainAlign: "MIN"` | `mainAlign: "flex-start"` | `justify-content` |
+| `mainAlign: "MAX"` | `mainAlign: "flex-end"` | `justify-content` |
+| `mainAlign: "CENTER"` | `mainAlign: "center"` | `justify-content` |
+| `mainAlign: "SPACE_BETWEEN"` | `mainAlign: "space-between"` | `justify-content` |
+| `crossAlign: "MIN"` | `crossAlign: "flex-start"` | `align-items` |
+| `crossAlign: "MAX"` | `crossAlign: "flex-end"` | `align-items` |
+| `crossAlign: "CENTER"` | `crossAlign: "center"` | `align-items` |
+| `layoutAlign: "INHERIT"` | `layoutAlign: "auto"` | `align-self` |
+| `layoutAlign: "STRETCH"` | `layoutAlign: "stretch"` | `align-self` |
+| `layout: "HORIZONTAL"` | `layout: "row"` | `flex-direction` |
+| `layout: "VERTICAL"` | `layout: "column"` | `flex-direction` |
+| `textDecoration: "STRIKETHROUGH"` | `textDecoration: "line-through"` | `text-decoration` |
+| `textCase: "TITLE"` | `textCase: "capitalize"` | `text-transform` |
+| `textCase: "UPPER"` | `textCase: "uppercase"` | `text-transform` |
+| `textCase: "LOWER"` | `textCase: "lowercase"` | `text-transform` |
+| `textAlignHorizontal: "JUSTIFIED"` | `textAlign: "justify"` | `text-align` |
+| `textAlignHorizontal: "LEFT"` etc. | `textAlign: "left"` | `text-align` |
+| `textAlignVertical: "TOP"` etc. | `verticalAlign: "top"` | vertical alignment |
+| `overflowDirection: "HORIZONTAL"` | `overflow: "x"` | `overflow-x` |
+| `overflowDirection: "VERTICAL"` | `overflow: "y"` | `overflow-y` |
+| `overflowDirection: "BOTH"` | `overflow: "both"` | `overflow` |
+| `GRADIENT_ANGULAR` | `"conic-gradient"` | `background` |
+| `GRADIENT_DIAMOND` | `"diamond-gradient"` | No CSS equiv; note in output |
+| `lineHeight: {value, unit}` | `lineHeight: "24px"` or `"150%"` or `"normal"` | `line-height` (flatten to string) |
+| `letterSpacing: {value, unit}` | `letterSpacing: "0.5px"` or `"2%"` | `letter-spacing` (flatten to string) |
+| `fontName.style: "Bold Italic"` | `fontWeight: 700, fontStyle: "italic"` | Split into weight + style |
+| `counterAxisSpacing` | `wrapGap` | `row-gap` (rename for clarity) |
+| `boundVariables` | Resolve variable ID → `variable.name` + `codeSyntax.WEB` | Emit as token name / CSS custom property directly |
+
+### Attach as LLM reference (complex / contextual mappings)
+
+These can't be normalized to a single CSS value — they require contextual reasoning. Include a compact mapping note in the MCP tool response.
+
+| Property | Why it needs a reference |
+|---|---|
+| `mainSize` / `crossSize` | `FIXED` = use explicit `w`/`h`; `AUTO` = omit width/height (hug). Depends on context. |
+| `constraints.horizontal/vertical` | `MIN`=pin-left, `MAX`=pin-right, `CENTER`=center, `STRETCH`=pin-both, `SCALE`=scale. Maps to positioning strategy, not a single CSS prop. |
+| `strokeAlign` | `INSIDE`=`border`, `OUTSIDE`=`outline` or `box-shadow`, `CENTER`=no clean CSS. Requires workaround reasoning. |
+| `fills[].handles` | Gradient transform coordinates → angle. Math conversion needed; consider computing the angle in the plugin instead. |

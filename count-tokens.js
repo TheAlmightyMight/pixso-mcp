@@ -64,7 +64,9 @@ wss.on("connection", (ws) => {
         lines.forEach((line) => console.log(line));
 
         // Сохранение JSON в файл
-        const timestamp = new Date().toISOString().replace(/[:.]/g, "-");
+        const timestamp = new Date()
+          .toLocaleDateString("ru-RU")
+          .replace(/\./g, "-");
         const jsonFilename = `selection-${timestamp}.json`;
         const jsonFilepath = `${testResultsDir}/${jsonFilename}`;
         fs.writeFileSync(jsonFilepath, jsonPretty);

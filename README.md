@@ -56,3 +56,7 @@ node index.js
 ## Лицензия
 
 MIT
+
+## Pixso docs
+
+- https://pixso.net/developer/en/plugin-api/guide/introduction.html
