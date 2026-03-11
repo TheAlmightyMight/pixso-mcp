@@ -33,6 +33,10 @@
         background-color: #fff1f0;
         color: #cf1322;
       }
+      .status-bar.reconnecting {
+        background-color: #fffbe6;
+        color: #d46b08;
+      }
       .status-dot {
         width: 8px;
         height: 8px;
@@ -190,6 +194,7 @@
     </div>
 
     <script>
+      // Конфигурационные константы
       const WS_URL = "ws://localhost:3667";
       const RECONNECT_DELAY = 5000;
       const MAX_LOG_ENTRIES = 50;
@@ -245,8 +250,8 @@
         uptimeTimer = setInterval(updateUptime, 1000);
       }
 
-      function setDisconnected(reason) {
-        statusBar.className = "status-bar disconnected";
+      function setDisconnected(reason, isReconnecting = false) {
+        statusBar.className = `status-bar ${isReconnecting ? "reconnecting" : "disconnected"}`;
         statusText.textContent = reason || "Отключено от сервера";
         connectedAt = null;
         connectedSinceEl.textContent = "—";
@@ -319,7 +324,7 @@
             if (secondsLeft <= 0) {
               clearInterval(reconnectTimer);
               reconnectTimer = null;
-              setDisconnected("Установка соединения...");
+              setDisconnected("Установка соединения...", true);
               connect();
             } else {
               updateReconnectStatus();
