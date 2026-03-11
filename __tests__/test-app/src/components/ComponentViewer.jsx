@@ -3,6 +3,11 @@ import ErrorBoundary from './ErrorBoundary'
 
 export default function ComponentViewer({ component }) {
   const [selectedGen, setSelectedGen] = useState(0)
+
+  if (!component) {
+    return <div className="error">Component not found</div>
+  }
+
   const generation = component.generations[selectedGen]
 
   if (!generation) {
