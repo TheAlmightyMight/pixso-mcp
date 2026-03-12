@@ -6,7 +6,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 Pixso MCP Server — a bridge that lets LLMs (e.g., Claude) interact with Pixso design files via the Model Context Protocol. The project has two parts that communicate over WebSocket (port 3667):
 
-1. **MCP Server (`server/`)** — Node.js server using `@modelcontextprotocol/sdk`, communicates with MCP clients via SSE (HTTP port 3668) and with the Pixso plugin via WebSocket (port 3667).
+1. **MCP Server (`server/`)** — Node.js server using `@modelcontextprotocol/sdk`, communicates with MCP clients via Streamable HTTP (port 3668, endpoint /mcp) and with the Pixso plugin via WebSocket (port 3667).
 2. **Pixso Plugin (`plugin/`)** — runs inside Pixso; `ui.html` maintains the WebSocket connection, `main.js` handles commands in the plugin's main thread using the `pixso` API.
 
 ## Commands
@@ -36,7 +36,7 @@ count-tokens.js   — utility: fetches selection and reports token count
 ## Architecture & Data Flow
 
 ```
-MCP Client (Claude) <--SSE:3668--> server/index.js
+MCP Client (Claude) <--HTTP:3668/mcp--> server/index.js
                                      |
                               server/bridge.js <--WebSocket:3667--> plugin/ui.html <--postMessage--> plugin/main.js
                                      |
@@ -63,7 +63,7 @@ MCP Client (Claude) <--SSE:3668--> server/index.js
 {
   "mcpServers": {
     "pixso": {
-      "url": "http://localhost:3668/sse"
+      "url": "http://localhost:3668/mcp"
     }
   }
 }

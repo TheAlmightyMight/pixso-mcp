@@ -4,7 +4,7 @@
 
 ## Архитектура
 
-1.  **MCP Server (index.js)**: Локальный Node.js сервер, который реализует протокол MCP через SSE (порт 3668) и запускает WebSocket-сервер (порт 3667).
+1.  **MCP Server (index.js)**: Локальный Node.js сервер, который реализует протокол MCP через Streamable HTTP (порт 3668, эндпоинт /mcp) и запускает WebSocket-сервер (порт 3667).
 2.  **Pixso Plugin (main.js + ui.html)**: Плагин для Pixso, который подключается к локальному серверу через WebSocket и извлекает данные из дизайна.
 
 ## Возможности (Tools)
@@ -20,7 +20,7 @@ npm install
 node server/index.js
 ```
 
-Сервер запустится на HTTP-порту `3668` (SSE) для MCP и откроет WebSocket-порт `3667`.
+Сервер запустится на HTTP-порту `3668` (эндпоинт `/mcp`) для MCP и откроет WebSocket-порт `3667`.
 
 ### 2. Установка плагина в Pixso
 
@@ -37,7 +37,7 @@ node server/index.js
 {
   "mcpServers": {
     "pixso": {
-      "url": "http://localhost:3668/sse"
+      "url": "http://localhost:3668/mcp"
     }
   }
 }

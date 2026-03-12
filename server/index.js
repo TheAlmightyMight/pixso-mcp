@@ -1,86 +1,70 @@
-import express from "express";
-import { Server } from "@modelcontextprotocol/sdk/server/index.js";
-import { SSEServerTransport } from "@modelcontextprotocol/sdk/server/sse.js";
-import {
-  CallToolRequestSchema,
-  ListToolsRequestSchema,
-} from "@modelcontextprotocol/sdk/types.js";
+import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
+import { StreamableHTTPServerTransport } from "@modelcontextprotocol/sdk/server/streamableHttp.js";
+import { createMcpExpressApp } from "@modelcontextprotocol/sdk/server/express.js";
 import { startBridge } from "./bridge.js";
-import { toolDefinitions, handleToolCall } from "./tools.js";
+import { handleToolCall } from "./tools.js";
 
 /**
  * MCP-сервер для Pixso.
- * Работает через SSE (HTTP), что позволяет подключать несколько клиентов одновременно.
+ * Использует современный McpServer и StreamableHTTPServerTransport.
+ * Поддерживает несколько клиентов одновременно через один эндпоинт.
  */
 
-const server = new Server(
-  {
-    name: "pixso-mcp-server",
-    version: "1.0.0",
-  },
-  {
-    capabilities: {
-      tools: {},
-    },
+const server = new McpServer({
+  name: "pixso-mcp-server",
+  version: "1.0.0",
+});
+
+// Регистрация инструментов через высокоуровневый API
+server.tool(
+  "get_selection",
+  "Возвращает полную спецификацию дизайна выделенных элементов, включая всё поддерево, стили, эффекты, макет и ограничения. Оптимизировано для генерации кода.",
+  {}, // Схема входных параметров (пустая для этого инструмента)
+  async () => {
+    try {
+      const data = await handleToolCall("get_selection");
+      return {
+        content: [{ type: "text", text: JSON.stringify(data) }],
+      };
+    } catch (error) {
+      const errorMessage = error instanceof Error ? error.message : String(error);
+      return {
+        content: [{ type: "text", text: `Ошибка: ${errorMessage}` }],
+        isError: true,
+      };
+    }
   },
 );
 
+// Запуск моста с плагином Pixso
 startBridge();
 
-server.setRequestHandler(ListToolsRequestSchema, async () => ({
-  tools: toolDefinitions,
-}));
+const app = createMcpExpressApp();
+const transport = new StreamableHTTPServerTransport();
 
-server.setRequestHandler(CallToolRequestSchema, async (request) => {
-  const { name, arguments: args } = request.params;
+// Привязываем сервер к транспорту один раз
+server.connect(transport).catch((error) => {
+  console.error("Ошибка при подключении транспорта:", error);
+});
+
+/**
+ * Единый эндпоинт для MCP (Streamable HTTP).
+ * Обрабатывает и GET (для SSE), и POST (для сообщений).
+ */
+app.all("/mcp", async (req, res) => {
   try {
-    const data = await handleToolCall(name, args);
-    return {
-      content: [{ type: "text", text: JSON.stringify(data) }],
-    };
+    // Передаем req.body, так как express.json() уже прочитал поток данных
+    await transport.handleRequest(req, res, req.body);
   } catch (error) {
-    const errorMessage = error instanceof Error ? error.message : String(error);
-    return {
-      isError: true,
-      content: [{ type: "text", text: `Ошибка: ${errorMessage}` }],
-    };
-  }
-});
-
-const app = express();
-app.use(express.json());
-
-// Хранилище активных SSE-транспортов для поддержки нескольких клиентов
-const transports = new Map();
-
-app.get("/sse", async (req, res) => {
-  console.error("Новое подключение по SSE");
-  const transport = new SSEServerTransport("/messages", res);
-  transports.set(transport.sessionId, transport);
-  
-  await server.connect(transport);
-
-  // Удаляем транспорт при закрытии соединения
-  res.on("close", () => {
-    console.error(`SSE соединение закрыто (sessionId: ${transport.sessionId})`);
-    transports.delete(transport.sessionId);
-  });
-});
-
-app.post("/messages", async (req, res) => {
-  const sessionId = req.query.sessionId;
-  const transport = transports.get(sessionId);
-
-  if (transport) {
-    await transport.handlePostMessage(req, res);
-  } else {
-    res.status(400).send("Invalid or expired sessionId");
+    console.error("Ошибка при обработке запроса:", error);
+    if (!res.headersSent) {
+      res.status(500).send("Internal Server Error");
+    }
   }
 });
 
 const PORT = 3668;
 app.listen(PORT, () => {
-  console.error(`Pixso MCP Server запущен на http://localhost:${PORT}`);
-  console.error(`SSE endpoint: http://localhost:${PORT}/sse`);
-  console.error(`Message endpoint: http://localhost:${PORT}/messages`);
+  console.error(`\n🚀 Pixso MCP Server запущен!`);
+  console.error(`Эндпоинт для Cursor/Claude: http://localhost:${PORT}/mcp`);
 });
