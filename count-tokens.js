@@ -45,8 +45,8 @@ async function run() {
     const json = JSON.stringify(data);
     const jsonPretty = JSON.stringify(data, null, 2);
 
-    // Считаем узлы
-    const nodeCount = (json.match(/"id":/g) || []).length;
+    // Считаем узлы (в нашем случае по полю "type", так как "id" мы не сериализуем)
+    const nodeCount = (json.match(/"type":/g) || []).length;
 
     // Оценка токенов: ~4 символа на токен для JSON (консервативно)
     const estimatedTokens = Math.ceil(json.length / 4);

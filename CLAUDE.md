@@ -29,8 +29,8 @@ plugin/
   main.js         — Pixso plugin main thread (sandbox, single-file)
   ui.html         — WebSocket client UI with auto-reconnect
   manifest.json   — Pixso plugin manifest
-tokens.js         — design tokens data
-count-tokens.js   — utility: fetches selection and reports token count
+tokens.js         — статистика токенов для ответа MCP сервера
+count-tokens.js   — утилита: запрашивает выделение и считает токены
 ```
 
 ## Architecture & Data Flow
