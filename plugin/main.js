@@ -159,6 +159,8 @@ function extractBase(node) {
   if ("y" in node) data.y = r1(node.y);
   if ("width" in node) data.w = r1(node.width);
   if ("height" in node) data.h = r1(node.height);
+  // DEBUG: expose raw visible value so we can see what Pixso sets for hidden layers
+  if ("visible" in node) data._visible = node.visible;
   return data;
 }
 
@@ -368,13 +370,8 @@ function serializeNode(node) {
   return Object.assign({}, ...extractors.map((fn) => fn(node, ctx) || {}));
 }
 
-function hasVisibleDescendant(node) {
-  if (!("children" in node) || node.children.length === 0) return false;
-  return node.children.some((child) => child.visible !== false || hasVisibleDescendant(child));
-}
-
 function serializeTree(node) {
-  if (node.visible === false && !hasVisibleDescendant(node)) return null;
+  if (node.visible === false) return null;
 
   const data = serializeNode(node);
   if ("children" in node && node.children.length > 0) {
