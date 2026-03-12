@@ -48,23 +48,37 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
 });
 
 const app = express();
-let transport = null;
+app.use(express.json());
+
+// Хранилище активных SSE-транспортов для поддержки нескольких клиентов
+const transports = new Map();
 
 app.get("/sse", async (req, res) => {
   console.error("Новое подключение по SSE");
-  transport = new SSEServerTransport("/messages", res);
+  const transport = new SSEServerTransport("/messages", res);
+  transports.set(transport.sessionId, transport);
+  
   await server.connect(transport);
+
+  // Удаляем транспорт при закрытии соединения
+  res.on("close", () => {
+    console.error(`SSE соединение закрыто (sessionId: ${transport.sessionId})`);
+    transports.delete(transport.sessionId);
+  });
 });
 
 app.post("/messages", async (req, res) => {
+  const sessionId = req.query.sessionId;
+  const transport = transports.get(sessionId);
+
   if (transport) {
     await transport.handlePostMessage(req, res);
   } else {
-    res.status(400).send("No active SSE transport");
+    res.status(400).send("Invalid or expired sessionId");
   }
 });
 
-const PORT = 3667;
+const PORT = 3668;
 app.listen(PORT, () => {
   console.error(`Pixso MCP Server запущен на http://localhost:${PORT}`);
   console.error(`SSE endpoint: http://localhost:${PORT}/sse`);

@@ -10,7 +10,7 @@ import fs from "fs";
  * (Убедитесь, что сервер index.js ЗАПУЩЕН)
  */
 
-const SERVER_URL = "http://localhost:3667/sse";
+const SERVER_URL = "http://localhost:3668/sse";
 const testResultsDir = "__tests__/test_results";
 
 // Создаем папку test_results, если она не существует
