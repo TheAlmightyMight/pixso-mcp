@@ -1,13 +1,13 @@
 import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
-import { SSEServerTransport } from "@modelcontextprotocol/sdk/server/sse.js";
-import express from "express";
+import { StreamableHTTPServerTransport } from "@modelcontextprotocol/sdk/server/streamableHttp.js";
+import { createMcpExpressApp } from "@modelcontextprotocol/sdk/server/express.js";
+import { isInitializeRequest } from "@modelcontextprotocol/sdk/types.js";
+import { randomUUID } from "node:crypto";
 import { startBridge } from "./bridge.js";
 import { handleToolCall } from "./tools.js";
 
 /**
- * Функция создания нового инстанса MCP сервера.
- * Это необходимо для SSEServerTransport, так как McpServer поддерживает
- * только одно активное соединение на инстанс.
+ * Создает новый инстанс MCP сервера для каждой сессии.
  */
 function createPixsoServer() {
   const server = new McpServer({
@@ -15,7 +15,6 @@ function createPixsoServer() {
     version: "1.0.0",
   });
 
-  // Регистрация инструментов
   server.tool(
     "get_selection",
     "Возвращает полную спецификацию дизайна выделенных элементов, включая всё поддерево, стили, эффекты, макет и ограничения. Оптимизировано для генерации кода.",
@@ -27,8 +26,7 @@ function createPixsoServer() {
           content: [{ type: "text", text: JSON.stringify(data) }],
         };
       } catch (error) {
-        const errorMessage =
-          error instanceof Error ? error.message : String(error);
+        const errorMessage = error instanceof Error ? error.message : String(error);
         return {
           content: [{ type: "text", text: `Ошибка: ${errorMessage}` }],
           isError: true,
@@ -43,102 +41,76 @@ function createPixsoServer() {
 // Запуск моста с плагином Pixso
 const wss = startBridge();
 
-const app = express();
+// Используем createMcpExpressApp — это рекомендуемый способ создания Express-приложения для MCP.
+// Оно уже включает express.json() и защиту от DNS-ребиндинга.
+const app = createMcpExpressApp();
 
-// ВАЖНО: МЫ НЕ ИСПОЛЬЗУЕМ app.use(express.json()) ГЛОБАЛЬНО,
-// так как это "съедает" поток данных (body) и ломает SSEServerTransport.
-
-/** @type {Map<string, SSEServerTransport>} */
+/** @type {Map<string, StreamableHTTPServerTransport>} */
 const transports = new Map();
 
 /**
- * Эндпоинт для установления SSE-соединения (GET).
+ * Единый эндпоинт для MCP (Streamable HTTP).
+ * Обрабатывает POST (инициализация и сообщения), GET (SSE) и DELETE (завершение).
  */
-app.get("/mcp", async (req, res) => {
-  console.error(
-    `\n[${new Date().toISOString()}] GET /mcp (SSE Connection attempt)`,
-  );
-
-  // Создаем транспорт. Клиент будет слать сообщения на /mcp/messages
-  const transport = new SSEServerTransport("/mcp/messages", res);
-  const sessionId = transport.sessionId;
-  transports.set(sessionId, transport);
-
-  console.error(
-    `[${new Date().toISOString()}] SSE Session created: ${sessionId}`,
-  );
-
-  transport.onclose = () => {
-    console.error(
-      `[${new Date().toISOString()}] SSE Session closed: ${sessionId}`,
-    );
-    transports.delete(sessionId);
-  };
-
+app.all("/mcp", async (req, res) => {
   try {
-    // Для каждого клиента создаем свой инстанс сервера
-    const server = createPixsoServer();
-    await server.connect(transport);
-    console.error(
-      `[${new Date().toISOString()}] Server connected to transport for session: ${sessionId}`,
-    );
+    const sessionId = req.headers["mcp-session-id"];
+    
+    // 1. Если сессия уже существует, используем её транспорт
+    if (sessionId && transports.has(sessionId)) {
+      const transport = transports.get(sessionId);
+      return await transport.handleRequest(req, res, req.body);
+    }
+
+    // 2. Если это запрос на инициализацию (обычно POST), создаем новую сессию
+    if (isInitializeRequest(req.body)) {
+      const transport = new StreamableHTTPServerTransport({
+        sessionIdGenerator: () => randomUUID(),
+        onsessioninitialized: (id) => {
+          console.error(`[${new Date().toISOString()}] SSE Session created: ${id}`);
+          transports.set(id, transport);
+        },
+        onsessionclosed: (id) => {
+          console.error(`[${new Date().toISOString()}] SSE Session closed: ${id}`);
+          transports.delete(id);
+        }
+      });
+
+      const server = createPixsoServer();
+      await server.connect(transport);
+      return await transport.handleRequest(req, res, req.body);
+    }
+
+    // 3. Обработка проверочного POST-запроса от Cursor (Streamable HTTP check)
+    if (req.method === "POST" && !sessionId) {
+      // Если это не инициализация, возвращаем 405, чтобы Cursor переключился на SSE
+      return res.status(405).json({
+        jsonrpc: "2.0",
+        error: { code: -32000, message: "Use initialize request to start session" },
+        id: null
+      });
+    }
+
+    // 4. Обработка GET запроса (SSE поток) без sessionId в заголовке.
+    // Если клиент шлет GET /mcp без mcp-session-id, это может быть старый SSE клиент
+    // или некорректный запрос Streamable HTTP.
+    if (req.method === "GET" && !sessionId) {
+      console.error(`\n[${new Date().toISOString()}] GET /mcp without session ID`);
+      return res.status(400).json({
+        jsonrpc: "2.0",
+        error: { code: -32000, message: "Mcp-Session-Id header is required for GET requests" },
+        id: null
+      });
+    }
+
+    res.status(404).send("Not Found");
+
   } catch (error) {
-    console.error("❌ Ошибка при подключении сервера к транспорту:", error);
+    console.error("❌ Ошибка при обработке запроса:", error);
     if (!res.headersSent) {
       res.status(500).send("Internal Server Error");
     }
   }
-});
-
-/**
- * Эндпоинт для приема сообщений (POST).
- * Вызывается клиентом после того, как он получил sessionId из GET /mcp.
- */
-app.post("/mcp/messages", async (req, res) => {
-  const sessionId = req.query.sessionId;
-
-  if (!sessionId) {
-    console.error("❌ Ошибка: Отсутствует sessionId в запросе к /mcp/messages");
-    return res.status(400).send("Session ID required");
-  }
-
-  const transport = transports.get(sessionId);
-  if (!transport) {
-    console.error(
-      `❌ Ошибка: Сессия ${sessionId} не найдена в активных транспортах`,
-    );
-    return res.status(404).send("Session not found");
-  }
-
-  try {
-    // SDK прочитает req как поток, так как мы не использовали express.json()
-    await transport.handlePostMessage(req, res);
-    console.error(
-      `[${new Date().toISOString()}] POST /mcp/messages - OK (session: ${sessionId})`,
-    );
-  } catch (error) {
-    console.error(
-      "❌ Ошибка при обработке сообщения в SSEServerTransport:",
-      error,
-    );
-    if (!res.headersSent) {
-      res.status(500).send(`Internal Error: ${error.message}`);
-    }
-  }
-});
-
-/**
- * Заглушка для POST /mcp для совместимости с Cursor.
- */
-app.post("/mcp", (req, res) => {
-  console.error(
-    `\n[${new Date().toISOString()}] POST /mcp (Streamable HTTP check) -> Sending 405`,
-  );
-  res.status(405).json({
-    error:
-      "Not a Streamable HTTP server. Please use GET /mcp for SSE connection.",
-    jsonrpc: "2.0",
-  });
 });
 
 const PORT = 3668;
@@ -152,7 +124,7 @@ const httpServer = app.listen(PORT, () => {
  */
 function shutdown() {
   console.error("\nОстановка серверов...");
-
+  
   wss.close(() => {
     console.error("WebSocket мост остановлен");
   });

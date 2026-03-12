@@ -1,5 +1,5 @@
 import { Client } from "@modelcontextprotocol/sdk/client/index.js";
-import { SSEClientTransport } from "@modelcontextprotocol/sdk/client/sse.js";
+import { StreamableHTTPClientTransport } from "@modelcontextprotocol/sdk/client/streamableHttp.js";
 import fs from "fs";
 
 /**
@@ -21,7 +21,7 @@ if (!fs.existsSync(testResultsDir)) {
 async function run() {
   console.log(`Подключение к серверу ${SERVER_URL}...`);
 
-  const transport = new SSEClientTransport(new URL(SERVER_URL));
+  const transport = new StreamableHTTPClientTransport(new URL(SERVER_URL));
   const client = new Client(
     { name: "token-counter-client", version: "1.0.0" },
     { capabilities: {} },

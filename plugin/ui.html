@@ -159,7 +159,7 @@
 
     <div id="status-bar" class="status-bar disconnected">
       <span class="status-dot"></span>
-      <span id="status-text">Отключено от сервера</span>
+      <span id="status-text">Отключено от моста</span>
     </div>
 
     <div class="info-grid">
@@ -244,7 +244,7 @@
           reconnectTimer = null;
         }
         statusBar.className = "status-bar connected";
-        statusText.textContent = "Подключено к MCP-серверу";
+        statusText.textContent = "Подключено к MCP-мосту";
         connectedAt = Date.now();
         updateUptime();
         uptimeTimer = setInterval(updateUptime, 1000);
@@ -252,7 +252,7 @@
 
       function setDisconnected(reason, isReconnecting = false) {
         statusBar.className = `status-bar ${isReconnecting ? "reconnecting" : "disconnected"}`;
-        statusText.textContent = reason || "Отключено от сервера";
+        statusText.textContent = reason || "Отключено от моста";
         connectedAt = null;
         connectedSinceEl.textContent = "—";
         if (uptimeTimer) {
@@ -357,7 +357,7 @@
               );
             }
           } catch (err) {
-            console.error("Ошибка при обработке сообщения от сервера:", err);
+            console.error("Ошибка при обработке сообщения от моста:", err);
           }
         };
       }
