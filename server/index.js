@@ -37,7 +37,7 @@ server.tool(
 );
 
 // Запуск моста с плагином Pixso
-startBridge();
+const wss = startBridge();
 
 const app = express();
 
@@ -120,7 +120,35 @@ app.post("/mcp", (req, res) => {
 });
 
 const PORT = 3668;
-app.listen(PORT, () => {
+const httpServer = app.listen(PORT, () => {
   console.error(`\n🚀 Pixso MCP Server запущен!`);
   console.error(`Эндпоинт для Cursor/Claude: http://localhost:${PORT}/mcp`);
 });
+
+/**
+ * Грейсфул-шатдаун (Graceful Shutdown).
+ * Закрываем все серверы при завершении процесса.
+ */
+function shutdown() {
+  console.error("\nОстановка серверов...");
+  
+  // Закрываем WebSocket мост
+  wss.close(() => {
+    console.error("WebSocket мост остановлен");
+  });
+
+  // Закрываем HTTP сервер
+  httpServer.close(() => {
+    console.error("HTTP сервер остановлен");
+    process.exit(0);
+  });
+
+  // Если серверы не закрылись за 5 секунд, выходим принудительно
+  setTimeout(() => {
+    console.error("Принудительное завершение работы...");
+    process.exit(1);
+  }, 5000);
+}
+
+process.on("SIGINT", shutdown);
+process.on("SIGTERM", shutdown);
