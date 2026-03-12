@@ -10,7 +10,7 @@ import fs from "fs";
  * (Убедитесь, что сервер index.js ЗАПУЩЕН)
  */
 
-const SERVER_URL = "http://localhost:3000/sse";
+const SERVER_URL = "http://localhost:3667/sse";
 const testResultsDir = "__tests__/test_results";
 
 // Создаем папку test_results, если она не существует
@@ -20,11 +20,11 @@ if (!fs.existsSync(testResultsDir)) {
 
 async function run() {
   console.log(`Подключение к серверу ${SERVER_URL}...`);
-  
+
   const transport = new SSEClientTransport(new URL(SERVER_URL));
   const client = new Client(
     { name: "token-counter-client", version: "1.0.0" },
-    { capabilities: {} }
+    { capabilities: {} },
   );
 
   try {
@@ -33,7 +33,7 @@ async function run() {
 
     const response = await client.callTool({
       name: "get_selection",
-      arguments: {}
+      arguments: {},
     });
 
     if (response.isError) {
@@ -79,7 +79,6 @@ async function run() {
 
     await client.close();
     process.exit(0);
-
   } catch (error) {
     console.error("Ошибка при работе с сервером:", error.message);
     process.exit(1);

@@ -64,7 +64,7 @@ app.post("/messages", async (req, res) => {
   }
 });
 
-const PORT = 3000;
+const PORT = 3667;
 app.listen(PORT, () => {
   console.error(`Pixso MCP Server запущен на http://localhost:${PORT}`);
   console.error(`SSE endpoint: http://localhost:${PORT}/sse`);
