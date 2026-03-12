@@ -1,5 +1,6 @@
+import express from "express";
 import { Server } from "@modelcontextprotocol/sdk/server/index.js";
-import { StdioServerTransport } from "@modelcontextprotocol/sdk/server/stdio.js";
+import { SSEServerTransport } from "@modelcontextprotocol/sdk/server/sse.js";
 import {
   CallToolRequestSchema,
   ListToolsRequestSchema,
@@ -9,7 +10,7 @@ import { toolDefinitions, handleToolCall } from "./tools.js";
 
 /**
  * MCP-сервер для Pixso.
- * Позволяет LLM запрашивать информацию о дизайне через WebSocket-мост с плагином.
+ * Работает через SSE (HTTP), что позволяет подключать несколько клиентов одновременно.
  */
 
 const server = new Server(
@@ -46,13 +47,26 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
   }
 });
 
-async function main() {
-  const transport = new StdioServerTransport();
-  await server.connect(transport);
-  console.error("Pixso MCP Server запущен на stdio");
-}
+const app = express();
+let transport = null;
 
-main().catch((error) => {
-  console.error("Критическая ошибка сервера:", error);
-  process.exit(1);
+app.get("/sse", async (req, res) => {
+  console.error("Новое подключение по SSE");
+  transport = new SSEServerTransport("/messages", res);
+  await server.connect(transport);
+});
+
+app.post("/messages", async (req, res) => {
+  if (transport) {
+    await transport.handlePostMessage(req, res);
+  } else {
+    res.status(400).send("No active SSE transport");
+  }
+});
+
+const PORT = 3000;
+app.listen(PORT, () => {
+  console.error(`Pixso MCP Server запущен на http://localhost:${PORT}`);
+  console.error(`SSE endpoint: http://localhost:${PORT}/sse`);
+  console.error(`Message endpoint: http://localhost:${PORT}/messages`);
 });

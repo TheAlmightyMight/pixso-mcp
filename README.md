@@ -4,7 +4,7 @@
 
 ## Архитектура
 
-1.  **MCP Server (index.js)**: Локальный Node.js сервер, который реализует протокол MCP и запускает WebSocket-сервер (порт 3667).
+1.  **MCP Server (index.js)**: Локальный Node.js сервер, который реализует протокол MCP через SSE (порт 3000) и запускает WebSocket-сервер (порт 3667).
 2.  **Pixso Plugin (main.js + ui.html)**: Плагин для Pixso, который подключается к локальному серверу через WebSocket и извлекает данные из дизайна.
 
 ## Возможности (Tools)
@@ -17,10 +17,10 @@
 
 ```bash
 npm install
-node index.js
+node server/index.js
 ```
 
-Сервер запустится на `stdio` для MCP и откроет WebSocket-порт `3667`.
+Сервер запустится на HTTP-порту `3000` (SSE) для MCP и откроет WebSocket-порт `3667`.
 
 ### 2. Установка плагина в Pixso
 
@@ -37,11 +37,16 @@ node index.js
 {
   "mcpServers": {
     "pixso": {
-      "command": "node",
-      "args": ["C:/путь/к/проекту/index.js"]
+      "url": "http://localhost:3000/sse"
     }
   }
 }
+```
+
+Для использования скрипта подсчета токенов при запущенном сервере:
+
+```bash
+npm run count-tokens
 ```
 
 ## Экономия токенов
