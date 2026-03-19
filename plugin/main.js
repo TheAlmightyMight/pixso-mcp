@@ -363,21 +363,36 @@ function mapImageFit(scaleMode) {
 
 function uint8ToBase64(bytes) {
   const alphabet = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/";
-  let output = "";
+  const len = bytes.length;
+  const remainder = len % 3;
+  const mainLen = len - remainder;
+  const resultLen = Math.ceil(len / 3) * 4;
+  const parts = new Array(resultLen);
+  let p = 0;
 
-  for (let i = 0; i < bytes.length; i += 3) {
-    const a = bytes[i];
-    const b = i + 1 < bytes.length ? bytes[i + 1] : 0;
-    const c = i + 2 < bytes.length ? bytes[i + 2] : 0;
-    const chunk = (a << 16) | (b << 8) | c;
-
-    output += alphabet[(chunk >> 18) & 63];
-    output += alphabet[(chunk >> 12) & 63];
-    output += i + 1 < bytes.length ? alphabet[(chunk >> 6) & 63] : "=";
-    output += i + 2 < bytes.length ? alphabet[chunk & 63] : "=";
+  for (let i = 0; i < mainLen; i += 3) {
+    const chunk = (bytes[i] << 16) | (bytes[i + 1] << 8) | bytes[i + 2];
+    parts[p++] = alphabet[(chunk >> 18) & 63];
+    parts[p++] = alphabet[(chunk >> 12) & 63];
+    parts[p++] = alphabet[(chunk >> 6) & 63];
+    parts[p++] = alphabet[chunk & 63];
   }
 
-  return output;
+  if (remainder === 1) {
+    const chunk = bytes[mainLen] << 16;
+    parts[p++] = alphabet[(chunk >> 18) & 63];
+    parts[p++] = alphabet[(chunk >> 12) & 63];
+    parts[p++] = "=";
+    parts[p++] = "=";
+  } else if (remainder === 2) {
+    const chunk = (bytes[mainLen] << 16) | (bytes[mainLen + 1] << 8);
+    parts[p++] = alphabet[(chunk >> 18) & 63];
+    parts[p++] = alphabet[(chunk >> 12) & 63];
+    parts[p++] = alphabet[(chunk >> 6) & 63];
+    parts[p++] = "=";
+  }
+
+  return parts.join("");
 }
 
 // --- Сериализация заливок ---
