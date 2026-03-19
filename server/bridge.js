@@ -349,11 +349,13 @@ export function startBridge(port = 3667) {
         const message = JSON.parse(data.toString());
 
         if (message.type === "response" && message.id) {
+          const rawSize = data.length;
           const entry = pendingRequests.get(message.id);
           if (!entry) {
             logBridge("late_response_ignored", {
               requestId: message.id,
               command: message.command,
+              rawSize,
             });
             return;
           }
@@ -361,6 +363,7 @@ export function startBridge(port = 3667) {
           settleRequest(entry, message.payload, "resolved", {
             responseType: message.payload && message.payload.error ? "error" : "ok",
             responseError: message.payload && message.payload.error ? message.payload.error : undefined,
+            rawSize,
           });
 
           drainLane(entry.lane);
