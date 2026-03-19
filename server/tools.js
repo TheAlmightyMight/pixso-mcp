@@ -45,6 +45,16 @@ export const svgInputSchema = {
   svgIdAttribute: z.boolean().optional().describe("Include id attributes in the exported SVG."),
 };
 
+export const diagnoseExportDescription =
+  "Diagnostic tool: exports current selection as PNG and SVG, validates data integrity, " +
+  "and returns a report with timings, sizes, and validation results. " +
+  "Use this when export tools produce errors, timeouts, or invalid images. " +
+  "Does NOT return image data — only diagnostic metadata.";
+
+export const diagnoseExportInputSchema = {
+  nodeIds: z.array(z.string()).min(1).optional().describe("Specific node ids to diagnose. If omitted, uses current selection."),
+};
+
 function unwrapPluginPayload(payload) {
   if (payload && payload.error) {
     throw new Error(payload.error);
@@ -143,6 +153,73 @@ export function buildExportToolResult(payload, fallbackMimeType) {
   };
 }
 
+export function buildDiagnosticResult(pngPayload, svgPayload) {
+  const report = { png: null, svg: null, issues: [] };
+
+  for (const [label, payload] of [["png", pngPayload], ["svg", svgPayload]]) {
+    if (!payload) {
+      report[label] = { status: "skipped" };
+      continue;
+    }
+
+    if (payload.error) {
+      report[label] = { status: "error", error: payload.error };
+      report.issues.push(`${label.toUpperCase()}: ${payload.error}`);
+      continue;
+    }
+
+    const items = Array.isArray(payload.items) ? payload.items : [];
+    const failures = Array.isArray(payload.failures) ? payload.failures : [];
+
+    const itemSummaries = items.map((item) => {
+      const summary = {
+        id: item.id,
+        name: item.name,
+        mimeType: item.mimeType,
+        w: item.w,
+        h: item.h,
+      };
+      if (item._debug) {
+        summary.rawBytes = item._debug.rawBytes;
+        summary.base64Len = item._debug.base64Len;
+        summary.exportMs = item._debug.exportMs;
+        summary.encodeMs = item._debug.encodeMs;
+      }
+      if (!item.data || item.data.length === 0) {
+        summary.valid = false;
+        summary.validationError = "empty base64 data";
+        report.issues.push(`${label.toUpperCase()} ${item.name || item.id}: empty base64 data`);
+      } else {
+        summary.valid = true;
+        summary.base64Len = item.data.length;
+      }
+      if (item.svgText) {
+        summary.svgTextLen = item.svgText.length;
+        summary.svgSnippet = item.svgText.substring(0, 200);
+      }
+      return summary;
+    });
+
+    report[label] = {
+      status: failures.length > 0 && items.length === 0 ? "failed" : items.length > 0 ? "ok" : "empty",
+      itemCount: items.length,
+      failureCount: failures.length,
+      items: itemSummaries,
+      failures,
+    };
+
+    failures.forEach((f) => {
+      report.issues.push(`${label.toUpperCase()} ${f.name || f.id}: ${f.error}`);
+    });
+  }
+
+  const text = JSON.stringify(report, null, 2);
+  return {
+    content: [{ type: "text", text }],
+    isError: report.issues.length > 0 && (!report.png?.itemCount) && (!report.svg?.itemCount),
+  };
+}
+
 /**
  * Обрабатывает вызов MCP-инструмента.
  * @param {string} name
@@ -173,6 +250,29 @@ export async function handleToolCall(name, args = {}) {
           recoverOnTimeout: true,
         }),
       );
+    case "diagnose_export": {
+      let pngPayload = null;
+      let svgPayload = null;
+      try {
+        pngPayload = await callPlugin("exportNodes", buildPngParams(args), {
+          lane: "export",
+          timeoutMs: DEFAULT_EXPORT_TIMEOUT_MS,
+          recoverOnTimeout: true,
+        });
+      } catch (error) {
+        pngPayload = { error: error instanceof Error ? error.message : String(error) };
+      }
+      try {
+        svgPayload = await callPlugin("exportNodes", buildSvgParams(args), {
+          lane: "export",
+          timeoutMs: DEFAULT_EXPORT_TIMEOUT_MS,
+          recoverOnTimeout: true,
+        });
+      } catch (error) {
+        svgPayload = { error: error instanceof Error ? error.message : String(error) };
+      }
+      return { _diagnostic: true, pngPayload, svgPayload };
+    }
     default:
       throw new Error(`Неизвестный инструмент: ${name}`);
   }
