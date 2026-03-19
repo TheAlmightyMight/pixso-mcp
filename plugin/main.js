@@ -199,6 +199,18 @@ function postResponse(request, payload) {
   });
 }
 
+function flushExportQueue(reason) {
+  const flushed = exportQueue.length;
+  while (exportQueue.length > 0) {
+    const job = exportQueue.shift();
+    markFailed(job.request, new Error(reason), { flushed: true });
+    postResponse(job.request, createResponsePayload(new Error(reason)));
+  }
+  if (flushed > 0) {
+    console.error(`[pixso-mcp] flushed ${flushed} queued export(s): ${reason}`);
+  }
+}
+
 function enqueueExportRequest(request, params) {
   exportQueue.push({
     request,
@@ -929,6 +941,11 @@ async function exportNodes(params = {}) {
 // --- Обработка сообщений от UI (из WebSocket-моста) ---
 
 pixso.ui.onmessage = async (msg) => {
+  if (msg.type === "mcp-bridge-reconnect") {
+    flushExportQueue("bridge reconnected — stale requests discarded");
+    return;
+  }
+
   if (msg.type !== "mcp-request") return;
 
   const { id, command, params } = msg;

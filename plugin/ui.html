@@ -304,6 +304,13 @@
 
         socket.onopen = () => {
           setConnected();
+          // Notify main.js to flush stale export queue after reconnect
+          if (reconnectCount > 0) {
+            parent.postMessage(
+              { pluginMessage: { type: "mcp-bridge-reconnect" } },
+              "*",
+            );
+          }
         };
 
         socket.onclose = () => {
