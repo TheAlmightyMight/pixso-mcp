@@ -910,20 +910,8 @@ async function exportNodes(params = {}) {
         if (assetExport.fit) item.fit = assetExport.fit;
       }
 
-      // For SVG, include the raw text so server can return it as text content
-      if (format === "SVG") {
-        // Use TextDecoder for correct UTF-8 handling (CJK, Cyrillic, etc.)
-        if (typeof TextDecoder !== "undefined") {
-          item.svgText = new TextDecoder().decode(bytes);
-        } else {
-          // Fallback: array-join to avoid O(n²) string concatenation
-          const chars = new Array(bytes.length);
-          for (let i = 0; i < bytes.length; i++) {
-            chars[i] = String.fromCharCode(bytes[i]);
-          }
-          item.svgText = chars.join("");
-        }
-      }
+      // SVG text decoding moved to server side (Node.js Buffer)
+      // to avoid doubling payload size through WebSocket
 
       items.push(item);
     } catch (err) {

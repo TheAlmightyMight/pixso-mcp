@@ -13,6 +13,8 @@ import path from "path";
 
 const SERVER_URL = "http://localhost:3668/mcp";
 const RESULTS_DIR = "__tests__/test_results";
+// MCP SDK default is 60s — exports can take much longer for complex designs
+const TOOL_TIMEOUT_MS = 300000;
 
 if (!fs.existsSync(RESULTS_DIR)) {
   fs.mkdirSync(RESULTS_DIR, { recursive: true });
@@ -90,7 +92,7 @@ async function run() {
       const diagResponse = await client.callTool({
         name: "diagnose_export",
         arguments: toolArgs,
-      });
+      }, undefined, { timeout: TOOL_TIMEOUT_MS });
       const diagMs = Date.now() - diagStart;
       console.log(`Completed in ${diagMs}ms`);
 
@@ -131,7 +133,7 @@ async function run() {
       const pngResponse = await client.callTool({
         name: "get_selection_png",
         arguments: toolArgs,
-      });
+      }, undefined, { timeout: TOOL_TIMEOUT_MS });
       const pngMs = Date.now() - pngStart;
       console.log(`Completed in ${pngMs}ms`);
 
@@ -167,7 +169,7 @@ async function run() {
       const svgResponse = await client.callTool({
         name: "get_selection_svg",
         arguments: toolArgs,
-      });
+      }, undefined, { timeout: TOOL_TIMEOUT_MS });
       const svgMs = Date.now() - svgStart;
       console.log(`Completed in ${svgMs}ms`);
 

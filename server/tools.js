@@ -124,11 +124,12 @@ export function buildExportToolResult(payload, fallbackMimeType) {
       text: `${item.name || item.id || "asset"}${details.length > 0 ? ` (${details.join(", ")})` : ""}`,
     });
 
-    if (item.svgText) {
-      // SVG: return as text so the LLM can read/use the vector source
+    if (format === "SVG" && item.data) {
+      // SVG: decode base64 to text on server side so the LLM can read/use the vector source
+      const svgText = Buffer.from(item.data, "base64").toString("utf-8");
       content.push({
         type: "text",
-        text: item.svgText,
+        text: svgText,
       });
     } else {
       // PNG and other binary formats: return as base64 image
@@ -193,9 +194,13 @@ export function buildDiagnosticResult(pngPayload, svgPayload) {
         summary.valid = true;
         summary.base64Len = item.data.length;
       }
-      if (item.svgText) {
-        summary.svgTextLen = item.svgText.length;
-        summary.svgSnippet = item.svgText.substring(0, 200);
+      // For SVG, decode base64 to show a snippet in diagnostics
+      if (label === "svg" && item.data && summary.valid) {
+        try {
+          const svgText = Buffer.from(item.data, "base64").toString("utf-8");
+          summary.svgTextLen = svgText.length;
+          summary.svgSnippet = svgText.substring(0, 200);
+        } catch { /* ignore decode errors in diagnostics */ }
       }
       return summary;
     });
