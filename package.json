@@ -7,6 +7,7 @@
   "scripts": {
     "start": "node server/index.js",
     "count-tokens": "node count-tokens.js",
+    "debug-export": "node debug-export.js",
     "typecheck": "tsc --noEmit",
     "lint:all": "eslint .",
     "dev": "cd __tests__/test-app && npm run dev"
