@@ -113,11 +113,21 @@ export function buildExportToolResult(payload, fallbackMimeType) {
       type: "text",
       text: `${item.name || item.id || "asset"}${details.length > 0 ? ` (${details.join(", ")})` : ""}`,
     });
-    content.push({
-      type: "image",
-      data: item.data,
-      mimeType: item.mimeType || fallbackMimeType,
-    });
+
+    if (item.svgText) {
+      // SVG: return as text so the LLM can read/use the vector source
+      content.push({
+        type: "text",
+        text: item.svgText,
+      });
+    } else {
+      // PNG and other binary formats: return as base64 image
+      content.push({
+        type: "image",
+        data: item.data,
+        mimeType: item.mimeType || fallbackMimeType,
+      });
+    }
   });
 
   if (failures.length > 0) {
