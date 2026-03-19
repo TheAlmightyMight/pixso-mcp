@@ -2,6 +2,8 @@ import { z } from "zod";
 import { callPlugin } from "./bridge.js";
 
 const CONSTRAINT_TYPE = ["SCALE", "WIDTH", "HEIGHT"];
+const DEFAULT_SELECTION_TIMEOUT_MS = 30000;
+const DEFAULT_EXPORT_TIMEOUT_MS = 120000;
 
 export const getSelectionDescription =
   "Use this tool first for layout and structure. It returns the selected design subtree optimized for JSX/Tailwind code generation. " +
@@ -140,11 +142,27 @@ export function buildExportToolResult(payload, fallbackMimeType) {
 export async function handleToolCall(name, args = {}) {
   switch (name) {
     case "get_selection":
-      return unwrapPluginPayload(await callPlugin("getSelection"));
+      return unwrapPluginPayload(
+        await callPlugin("getSelection", {}, {
+          timeoutMs: DEFAULT_SELECTION_TIMEOUT_MS,
+        }),
+      );
     case "get_selection_png":
-      return unwrapPluginPayload(await callPlugin("exportNodes", buildPngParams(args)));
+      return unwrapPluginPayload(
+        await callPlugin("exportNodes", buildPngParams(args), {
+          lane: "export",
+          timeoutMs: DEFAULT_EXPORT_TIMEOUT_MS,
+          recoverOnTimeout: true,
+        }),
+      );
     case "get_selection_svg":
-      return unwrapPluginPayload(await callPlugin("exportNodes", buildSvgParams(args)));
+      return unwrapPluginPayload(
+        await callPlugin("exportNodes", buildSvgParams(args), {
+          lane: "export",
+          timeoutMs: DEFAULT_EXPORT_TIMEOUT_MS,
+          recoverOnTimeout: true,
+        }),
+      );
     default:
       throw new Error(`Неизвестный инструмент: ${name}`);
   }

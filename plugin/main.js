@@ -5,7 +5,7 @@ pixso.showUI(__html__, {
   height: 420,
 });
 
-// ─── Таблицы нормализации ────────────────────────────────────────────────────
+// --- Таблицы нормализации ---
 
 const LAYOUT_DIR = { HORIZONTAL: "row", VERTICAL: "column" };
 
@@ -64,8 +64,179 @@ const MIME_TYPE = {
   SVG: "image/svg+xml",
 };
 
-// ─── Утилиты ─────────────────────────────────────────────────────────────────
+// --- Утилиты ---
 
+
+const REQUEST_STATE = {
+  RECEIVED: "received",
+  QUEUED: "queued",
+  RUNNING: "running",
+  DONE: "done",
+  FAILED: "failed",
+};
+
+const EXPORT_COMMAND = "exportNodes";
+
+const requestRecords = new Map();
+const exportQueue = [];
+let exportQueueRunning = false;
+
+function nowMs() {
+  return Date.now();
+}
+
+function formatLogValue(value) {
+  if (value === undefined) return undefined;
+  if (typeof value === "string") return JSON.stringify(value);
+  return String(value);
+}
+
+function logRequestEvent(event, request, extra = {}) {
+  const parts = [
+    `event=${formatLogValue(event)}`,
+    `state=${formatLogValue(request.state)}`,
+    `id=${formatLogValue(request.id)}`,
+    `command=${formatLogValue(request.command)}`,
+  ];
+
+  Object.entries(extra).forEach(([key, value]) => {
+    if (value !== undefined) {
+      parts.push(`${key}=${formatLogValue(value)}`);
+    }
+  });
+
+  console.error(`[pixso-mcp] ${parts.join(" ")}`);
+}
+
+function createRequestRecord(id, command) {
+  const record = {
+    id,
+    command,
+    state: REQUEST_STATE.RECEIVED,
+    receivedAt: nowMs(),
+    queuedAt: null,
+    startedAt: null,
+    finishedAt: null,
+  };
+
+  requestRecords.set(id, record);
+  logRequestEvent(REQUEST_STATE.RECEIVED, record);
+  return record;
+}
+
+function getRequestTimings(record) {
+  const finishedAt = record.finishedAt || nowMs();
+  return {
+    queuedMs: record.queuedAt && record.startedAt ? record.startedAt - record.queuedAt : 0,
+    runMs: record.startedAt ? finishedAt - record.startedAt : 0,
+    totalMs: finishedAt - record.receivedAt,
+  };
+}
+
+function finishRequestRecord(record) {
+  requestRecords.delete(record.id);
+}
+
+function markQueued(record, queueDepth) {
+  record.state = REQUEST_STATE.QUEUED;
+  if (!record.queuedAt) {
+    record.queuedAt = nowMs();
+  }
+  logRequestEvent(REQUEST_STATE.QUEUED, record, { queueDepth });
+}
+
+function markRunning(record, queueDepth) {
+  record.state = REQUEST_STATE.RUNNING;
+  if (!record.startedAt) {
+    record.startedAt = nowMs();
+  }
+  const timings = getRequestTimings(record);
+  logRequestEvent(REQUEST_STATE.RUNNING, record, {
+    queueDepth,
+    queuedMs: timings.queuedMs,
+  });
+}
+
+function markDone(record, extra = {}) {
+  record.state = REQUEST_STATE.DONE;
+  record.finishedAt = nowMs();
+  const timings = getRequestTimings(record);
+  logRequestEvent(REQUEST_STATE.DONE, record, {
+    queuedMs: timings.queuedMs,
+    runMs: timings.runMs,
+    totalMs: timings.totalMs,
+    ...extra,
+  });
+  finishRequestRecord(record);
+}
+
+function markFailed(record, error, extra = {}) {
+  record.state = REQUEST_STATE.FAILED;
+  record.finishedAt = nowMs();
+  const timings = getRequestTimings(record);
+  logRequestEvent(REQUEST_STATE.FAILED, record, {
+    queuedMs: timings.queuedMs,
+    runMs: timings.runMs,
+    totalMs: timings.totalMs,
+    error: error instanceof Error ? error.message : String(error),
+    ...extra,
+  });
+  finishRequestRecord(record);
+}
+
+function createResponsePayload(error) {
+  return {
+    error: error instanceof Error ? error.message : String(error),
+  };
+}
+
+function postResponse(request, payload) {
+  pixso.ui.postMessage({
+    type: "mcp-response",
+    id: request.id,
+    command: request.command,
+    payload,
+  });
+}
+
+function enqueueExportRequest(request, params) {
+  exportQueue.push({
+    request,
+    params,
+  });
+
+  markQueued(request, exportQueue.length);
+  void drainExportQueue();
+}
+
+async function drainExportQueue() {
+  if (exportQueueRunning) return;
+
+  exportQueueRunning = true;
+
+  try {
+    while (exportQueue.length > 0) {
+      const job = exportQueue.shift();
+      const { request, params } = job;
+
+      markRunning(request, exportQueue.length);
+
+      try {
+        const payload = await exportNodes(params || {});
+        markDone(request, {
+          itemCount: Array.isArray(payload?.items) ? payload.items.length : 0,
+          failureCount: Array.isArray(payload?.failures) ? payload.failures.length : 0,
+        });
+        postResponse(request, payload);
+      } catch (error) {
+        markFailed(request, error);
+        postResponse(request, createResponsePayload(error));
+      }
+    }
+  } finally {
+    exportQueueRunning = false;
+  }
+}
 function r1(v) { return Math.round(v * 10) / 10; }
 function r3(v) { return Math.round(v * 1000) / 1000; }
 
@@ -209,7 +380,7 @@ function uint8ToBase64(bytes) {
   return output;
 }
 
-// ─── Сериализация заливок ────────────────────────────────────────────────────
+// --- Сериализация заливок ---
 
 function serializeFill(fill) {
   if (fill.visible === false || fill.type === "IMAGE") return null;
@@ -243,9 +414,9 @@ function serializeFill(fill) {
   return null;
 }
 
-// ─── Экстракторы свойств ─────────────────────────────────────────────────────
+// --- Экстракторы свойств ---
 
-// extractStyles ДОЛЖЕН быть первым — заполняет ctx для остальных экстракторов
+// extractStyles ДОЛЖЕН быть первым - заполняет ctx для остальных экстракторов
 function extractStyles(node, ctx) {
   const data = {};
 
@@ -458,7 +629,7 @@ function extractOverflow(node) {
   return Object.keys(data).length > 0 ? data : null;
 }
 
-// ─── Профили и анализ ассетов ────────────────────────────────────────────────
+// --- Профили и анализ ассетов ---
 
 const PROFILES = {
   codegen: [
@@ -585,7 +756,7 @@ function countNodes(tree) {
   return count;
 }
 
-// ─── Экспорт нод ─────────────────────────────────────────────────────────────
+// --- Экспорт нод ---
 
 function buildExportSettings(format, rawSettings = {}) {
   const settings = { format };
@@ -688,15 +859,22 @@ async function exportNodes(params = {}) {
   return { format, items, failures };
 }
 
-// ─── Обработка сообщений от UI (из WebSocket-моста) ─────────────────────────
+// --- Обработка сообщений от UI (из WebSocket-моста) ---
 
 pixso.ui.onmessage = async (msg) => {
   if (msg.type !== "mcp-request") return;
 
   const { id, command, params } = msg;
-  let payload;
+  const request = createRequestRecord(id, command);
+
+  if (command === EXPORT_COMMAND) {
+    enqueueExportRequest(request, params || {});
+    return;
+  }
 
   try {
+    markRunning(request, 0);
+
     switch (command) {
       case "getSelection": {
         const selection = pixso.currentPage.selection;
@@ -706,29 +884,25 @@ pixso.ui.onmessage = async (msg) => {
           .filter(Boolean);
         const totalCount = nodes.reduce((sum, node) => sum + countNodes(node), 0);
 
-        payload = { nodes };
+        const payload = { nodes };
         if (totalCount > 200) {
           payload._warning = `Large selection: ${totalCount} nodes`;
         }
+
+        markDone(request, {
+          nodeCount: nodes.length,
+          totalCount,
+        });
+        postResponse(request, payload);
         break;
       }
 
-      case "exportNodes":
-        payload = await exportNodes(params || {});
-        break;
-
-      default:
-        payload = { error: `Command ${command} not supported` };
+      default: {
+        throw new Error(`Command ${command} not supported`);
+      }
     }
-  } catch (err) {
-    console.error("Ошибка в main.js:", err);
-    payload = { error: err instanceof Error ? err.message : String(err) };
+  } catch (error) {
+    markFailed(request, error);
+    postResponse(request, createResponsePayload(error));
   }
-
-  pixso.ui.postMessage({
-    type: "mcp-response",
-    id,
-    command,
-    payload,
-  });
 };
