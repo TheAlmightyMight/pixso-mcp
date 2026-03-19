@@ -5,7 +5,7 @@ pixso.showUI(__html__, {
   height: 420,
 });
 
-// ─── Таблицы нормализации ──────────────────────────────────────────
+// ─── Таблицы нормализации ────────────────────────────────────────────────────
 
 const LAYOUT_DIR = { HORIZONTAL: "row", VERTICAL: "column" };
 
@@ -49,7 +49,22 @@ const FONT_WEIGHT = {
   black: 900, heavy: 900,
 };
 
-// ─── Утилиты ───────────────────────────────────────────────────────
+const VECTOR_NODE_TYPES = new Set([
+  "VECTOR",
+  "BOOLEAN_OPERATION",
+  "STAR",
+  "POLYGON",
+  "ELLIPSE",
+  "LINE",
+  "RECTANGLE",
+]);
+
+const MIME_TYPE = {
+  PNG: "image/png",
+  SVG: "image/svg+xml",
+};
+
+// ─── Утилиты ─────────────────────────────────────────────────────────────────
 
 function r1(v) { return Math.round(v * 10) / 10; }
 function r3(v) { return Math.round(v * 1000) / 1000; }
@@ -93,29 +108,130 @@ function resolveFontWeight(fontName) {
   return { fontWeight: weight, fontStyle: isItalic ? "italic" : "normal" };
 }
 
-// ─── Сериализация заливок ──────────────────────────────────────────
+function getVisibleChildren(node) {
+  if (!("children" in node) || !Array.isArray(node.children)) return [];
+  return node.children.filter((child) => child.visible !== false);
+}
 
-function serializeFill(f) {
-  if (f.visible === false) return null;
+function getVisibleFills(node) {
+  if (!("fills" in node) || !Array.isArray(node.fills)) return [];
+  return node.fills.filter((fill) => fill && fill.visible !== false);
+}
 
-  if (f.type === "SOLID") {
-    const data = { color: toHex(f.color.r, f.color.g, f.color.b) };
-    if (f.opacity !== undefined && f.opacity < 1) data.opacity = f.opacity;
+function getVisibleStrokes(node) {
+  if (!("strokes" in node) || !Array.isArray(node.strokes)) return [];
+  return node.strokes.filter((stroke) => stroke && stroke.visible !== false);
+}
+
+function getBounds(node) {
+  return {
+    x: "x" in node ? node.x : 0,
+    y: "y" in node ? node.y : 0,
+    w: "width" in node ? node.width : 0,
+    h: "height" in node ? node.height : 0,
+  };
+}
+
+function boundsOverlapOrNear(a, b, gap) {
+  return (
+    a.x - gap <= b.x + b.w &&
+    a.x + a.w + gap >= b.x &&
+    a.y - gap <= b.y + b.h &&
+    a.y + a.h + gap >= b.y
+  );
+}
+
+function countGraphicClusters(node, childInfos) {
+  if (childInfos.length <= 1) return childInfos.length;
+
+  const nodeBounds = getBounds(node);
+  const gap = Math.max(4, Math.min(nodeBounds.w || 0, nodeBounds.h || 0) * 0.05);
+  const visited = new Set();
+  let clusters = 0;
+
+  function visit(startIndex) {
+    const queue = [startIndex];
+    visited.add(startIndex);
+
+    while (queue.length > 0) {
+      const index = queue.shift();
+      const current = childInfos[index];
+
+      for (let i = 0; i < childInfos.length; i += 1) {
+        if (visited.has(i)) continue;
+        if (boundsOverlapOrNear(current.bounds, childInfos[i].bounds, gap)) {
+          visited.add(i);
+          queue.push(i);
+        }
+      }
+    }
+  }
+
+  for (let i = 0; i < childInfos.length; i += 1) {
+    if (visited.has(i)) continue;
+    visit(i);
+    clusters += 1;
+  }
+
+  return clusters;
+}
+
+function mapImageFit(scaleMode) {
+  switch (scaleMode) {
+    case "FIT":
+      return "contain";
+    case "TILE":
+      return "tile";
+    case "FILL":
+    case "CROP":
+      return "cover";
+    default:
+      return null;
+  }
+}
+
+function uint8ToBase64(bytes) {
+  const alphabet = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/";
+  let output = "";
+
+  for (let i = 0; i < bytes.length; i += 3) {
+    const a = bytes[i];
+    const b = i + 1 < bytes.length ? bytes[i + 1] : 0;
+    const c = i + 2 < bytes.length ? bytes[i + 2] : 0;
+    const chunk = (a << 16) | (b << 8) | c;
+
+    output += alphabet[(chunk >> 18) & 63];
+    output += alphabet[(chunk >> 12) & 63];
+    output += i + 1 < bytes.length ? alphabet[(chunk >> 6) & 63] : "=";
+    output += i + 2 < bytes.length ? alphabet[chunk & 63] : "=";
+  }
+
+  return output;
+}
+
+// ─── Сериализация заливок ────────────────────────────────────────────────────
+
+function serializeFill(fill) {
+  if (fill.visible === false || fill.type === "IMAGE") return null;
+
+  if (fill.type === "SOLID") {
+    const data = { color: toHex(fill.color.r, fill.color.g, fill.color.b) };
+    if (fill.opacity !== undefined && fill.opacity < 1) data.opacity = fill.opacity;
     return data;
   }
 
-  const gradType = GRADIENT_TYPE[f.type];
+  const gradType = GRADIENT_TYPE[fill.type];
   if (gradType) {
     const result = {
       type: gradType,
-      stops: f.gradientStops.map((s) => {
-        const stop = { pos: s.position, color: toHex(s.color.r, s.color.g, s.color.b) };
-        if (s.color.a < 1) stop.opacity = s.color.a;
-        return stop;
+      stops: fill.gradientStops.map((stop) => {
+        const item = { pos: stop.position, color: toHex(stop.color.r, stop.color.g, stop.color.b) };
+        if (stop.color.a < 1) item.opacity = stop.color.a;
+        return item;
       }),
     };
-    if (f.gradientTransform) {
-      const [[a, , tx], [c, , ty]] = f.gradientTransform;
+    if (fill.gradientTransform) {
+      const [[a, , tx], [c, , ty]] = fill.gradientTransform;
       result.handles = [
         [r3(tx), r3(ty)],
         [r3(tx + a), r3(ty + c)],
@@ -124,16 +240,10 @@ function serializeFill(f) {
     return result;
   }
 
-  if (f.type === "IMAGE") {
-    const data = { type: "image" };
-    if (f.scaleMode) data.scaleMode = f.scaleMode;
-    return data;
-  }
-
   return null;
 }
 
-// ─── Экстракторы свойств ───────────────────────────────────────────
+// ─── Экстракторы свойств ─────────────────────────────────────────────────────
 
 // extractStyles ДОЛЖЕН быть первым — заполняет ctx для остальных экстракторов
 function extractStyles(node, ctx) {
@@ -159,35 +269,34 @@ function extractBase(node) {
   if ("y" in node) data.y = r1(node.y);
   if ("width" in node) data.w = r1(node.width);
   if ("height" in node) data.h = r1(node.height);
-  // DEBUG: expose raw visible value so we can see what Pixso sets for hidden layers
-  if ("visible" in node) data._visible = node.visible;
   return data;
 }
 
 function extractFills(node, ctx) {
   if (ctx.hasFillStyle) return null;
-  if (!("fills" in node) || !Array.isArray(node.fills)) return null;
-  const fills = node.fills.map(serializeFill).filter(Boolean);
+  const fills = getVisibleFills(node).map(serializeFill).filter(Boolean);
   return fills.length > 0 ? { fills } : null;
 }
 
 function extractStrokes(node, ctx) {
-  if (!("strokes" in node) || !Array.isArray(node.strokes) || node.strokes.length === 0) return null;
+  const strokes = getVisibleStrokes(node);
+  if (strokes.length === 0) return null;
   const data = {};
 
   if (!ctx.hasStrokeStyle) {
-    const colors = node.strokes
-      .filter((s) => s.type === "SOLID")
-      .map((s) => toHex(s.color.r, s.color.g, s.color.b));
+    const colors = strokes
+      .filter((stroke) => stroke.type === "SOLID")
+      .map((stroke) => toHex(stroke.color.r, stroke.color.g, stroke.color.b));
     if (colors.length > 0) {
       data.stroke = colors.length === 1 ? colors[0] : colors;
     }
   }
 
-  // Ширина обводки: единая или по сторонам
   if ("strokeTopWeight" in node) {
-    const t = node.strokeTopWeight, r = node.strokeRightWeight;
-    const b = node.strokeBottomWeight, l = node.strokeLeftWeight;
+    const t = node.strokeTopWeight;
+    const r = node.strokeRightWeight;
+    const b = node.strokeBottomWeight;
+    const l = node.strokeLeftWeight;
     const uniform = "strokeWeight" in node && t === node.strokeWeight && r === node.strokeWeight && b === node.strokeWeight && l === node.strokeWeight;
     if (uniform) {
       data.strokeW = node.strokeWeight;
@@ -207,45 +316,43 @@ function extractText(node, ctx) {
   if (node.type !== "TEXT") return null;
   const data = { text: node.characters };
 
-  // C-флаг: типографика пропускается если есть текстовый токен
   if (!ctx.hasTextStyle) {
     if ("fontSize" in node && node.fontSize !== pixso.mixed) {
       data.fontSize = node.fontSize;
     }
     if ("fontName" in node && node.fontName !== pixso.mixed) {
       data.fontFamily = node.fontName.family;
-      const wt = resolveFontWeight(node.fontName);
-      if (wt) {
-        data.fontWeight = wt.fontWeight;
-        if (wt.fontStyle !== "normal") data.fontStyle = wt.fontStyle;
+      const weight = resolveFontWeight(node.fontName);
+      if (weight) {
+        data.fontWeight = weight.fontWeight;
+        if (weight.fontStyle !== "normal") data.fontStyle = weight.fontStyle;
       }
     }
     if ("lineHeight" in node) {
-      const lh = resolveLineHeight(node.lineHeight);
-      if (lh) data.lineHeight = lh;
+      const lineHeight = resolveLineHeight(node.lineHeight);
+      if (lineHeight) data.lineHeight = lineHeight;
     }
     if ("letterSpacing" in node) {
-      const ls = resolveLetterSpacing(node.letterSpacing);
-      if (ls) data.letterSpacing = ls;
+      const letterSpacing = resolveLetterSpacing(node.letterSpacing);
+      if (letterSpacing) data.letterSpacing = letterSpacing;
     }
   }
 
-  // P-флаги: всегда присутствуют (не зависят от текстового токена)
   if ("textAlignHorizontal" in node && node.textAlignHorizontal !== pixso.mixed) {
-    const v = TEXT_ALIGN_H[node.textAlignHorizontal];
-    if (v && v !== "left") data.textAlign = v;
+    const value = TEXT_ALIGN_H[node.textAlignHorizontal];
+    if (value && value !== "left") data.textAlign = value;
   }
   if ("textAlignVertical" in node && node.textAlignVertical !== pixso.mixed) {
-    const v = TEXT_ALIGN_V[node.textAlignVertical];
-    if (v && v !== "top") data.verticalAlign = v;
+    const value = TEXT_ALIGN_V[node.textAlignVertical];
+    if (value && value !== "top") data.verticalAlign = value;
   }
   if ("textDecoration" in node && node.textDecoration !== pixso.mixed) {
-    const v = TEXT_DECORATION_MAP[node.textDecoration];
-    if (v) data.textDecoration = v;
+    const value = TEXT_DECORATION_MAP[node.textDecoration];
+    if (value) data.textDecoration = value;
   }
   if ("textCase" in node && node.textCase !== pixso.mixed) {
-    const v = TEXT_CASE_MAP[node.textCase];
-    if (v) data.textCase = v;
+    const value = TEXT_CASE_MAP[node.textCase];
+    if (value) data.textCase = value;
   }
   if ("textAutoResize" in node && node.textAutoResize === "TRUNCATE") {
     data.truncate = true;
@@ -257,16 +364,22 @@ function extractText(node, ctx) {
 function extractEffects(node) {
   if (!("effects" in node) || !Array.isArray(node.effects)) return null;
   const effects = node.effects
-    .filter((e) => e.visible !== false)
-    .map((e) => {
-      if (e.type === "DROP_SHADOW" || e.type === "INNER_SHADOW") {
-        const d = { type: e.type, x: e.offset.x, y: e.offset.y, blur: e.radius, color: toHex(e.color.r, e.color.g, e.color.b) };
-        if (e.spread) d.spread = e.spread;
-        if (e.color.a < 1) d.opacity = e.color.a;
-        return d;
+    .filter((effect) => effect.visible !== false)
+    .map((effect) => {
+      if (effect.type === "DROP_SHADOW" || effect.type === "INNER_SHADOW") {
+        const data = {
+          type: effect.type,
+          x: effect.offset.x,
+          y: effect.offset.y,
+          blur: effect.radius,
+          color: toHex(effect.color.r, effect.color.g, effect.color.b),
+        };
+        if (effect.spread) data.spread = effect.spread;
+        if (effect.color.a < 1) data.opacity = effect.color.a;
+        return data;
       }
-      if (e.type === "LAYER_BLUR" || e.type === "BACKGROUND_BLUR") {
-        return { type: e.type, blur: e.radius };
+      if (effect.type === "LAYER_BLUR" || effect.type === "BACKGROUND_BLUR") {
+        return { type: effect.type, blur: effect.radius };
       }
       return null;
     })
@@ -301,8 +414,8 @@ function extractAutoLayout(node) {
 
   if (node.itemSpacing) data.gap = node.itemSpacing;
 
-  const p = [node.paddingTop || 0, node.paddingRight || 0, node.paddingBottom || 0, node.paddingLeft || 0];
-  if (p.some((v) => v > 0)) data.padding = p;
+  const padding = [node.paddingTop || 0, node.paddingRight || 0, node.paddingBottom || 0, node.paddingLeft || 0];
+  if (padding.some((value) => value > 0)) data.padding = padding;
 
   if ("primaryAxisAlignItems" in node) data.mainAlign = MAIN_ALIGN[node.primaryAxisAlignItems] || node.primaryAxisAlignItems;
   if ("counterAxisAlignItems" in node) data.crossAlign = CROSS_ALIGN[node.counterAxisAlignItems] || node.counterAxisAlignItems;
@@ -322,8 +435,8 @@ function extractAutoLayout(node) {
 function extractLayoutChild(node) {
   const data = {};
   if ("layoutAlign" in node) {
-    const v = LAYOUT_ALIGN_MAP[node.layoutAlign];
-    if (v && v !== "auto") data.layoutAlign = v;
+    const value = LAYOUT_ALIGN_MAP[node.layoutAlign];
+    if (value && value !== "auto") data.layoutAlign = value;
   }
   if ("layoutGrow" in node && node.layoutGrow === 1) data.layoutGrow = 1;
   return Object.keys(data).length > 0 ? data : null;
@@ -332,22 +445,21 @@ function extractLayoutChild(node) {
 function extractOverflow(node) {
   const data = {};
   if ("overflowDirection" in node) {
-    const v = OVERFLOW_DIR[node.overflowDirection];
-    if (v) data.overflow = v;
+    const value = OVERFLOW_DIR[node.overflowDirection];
+    if (value) data.overflow = value;
   }
   if ("clipsContent" in node && node.clipsContent) data.clipsContent = true;
   if ("constraints" in node) {
-    const c = node.constraints;
-    if (c.horizontal !== "MIN" || c.vertical !== "MIN") {
-      data.constraints = { h: c.horizontal, v: c.vertical };
+    const constraints = node.constraints;
+    if (constraints.horizontal !== "MIN" || constraints.vertical !== "MIN") {
+      data.constraints = { h: constraints.horizontal, v: constraints.vertical };
     }
   }
   return Object.keys(data).length > 0 ? data : null;
 }
 
-// ─── Профили и сериализация ────────────────────────────────────────
+// ─── Профили и анализ ассетов ────────────────────────────────────────────────
 
-// extractStyles ДОЛЖЕН быть первым — заполняет ctx перед остальными экстракторами
 const PROFILES = {
   codegen: [
     extractStyles,
@@ -366,37 +478,222 @@ const PROFILES = {
 
 function serializeNode(node) {
   const ctx = {};
-  const extractors = PROFILES.codegen;
-  return Object.assign({}, ...extractors.map((fn) => fn(node, ctx) || {}));
+  return Object.assign({}, ...PROFILES.codegen.map((extractor) => extractor(node, ctx) || {}));
 }
 
-function serializeTree(node) {
-  if (node.visible === false) return null;
+function analyzeNode(node) {
+  const childInfos = getVisibleChildren(node)
+    .map((child) => analyzeNode(child))
+    .filter(Boolean);
 
-  const data = serializeNode(node);
-  if ("children" in node && node.children.length > 0) {
-    const children = node.children
-      .map((child) => serializeTree(child))
+  const fills = getVisibleFills(node);
+  const strokes = getVisibleStrokes(node);
+  const imageFills = fills.filter((fill) => fill.type === "IMAGE");
+  const nonImageFills = fills.filter((fill) => fill.type !== "IMAGE");
+  const selfHasVectorType = VECTOR_NODE_TYPES.has(node.type);
+  const selfHasStroke = strokes.length > 0;
+  const selfHasVectorPaint = nonImageFills.length > 0 || selfHasStroke || selfHasVectorType;
+
+  const hasText = node.type === "TEXT" || childInfos.some((child) => child.hasText);
+  const hasImage = imageFills.length > 0 || childInfos.some((child) => child.hasImage);
+  const hasVector = selfHasVectorPaint || childInfos.some((child) => child.hasVector);
+  const hasGraphic = hasImage || hasVector;
+  const graphicChildren = childInfos.filter((child) => child.hasGraphic);
+  const clusters = countGraphicClusters(node, graphicChildren);
+  const hasMultiChildAutoLayout = "layoutMode" in node && node.layoutMode !== "NONE" && getVisibleChildren(node).length > 1;
+  const isCoherentAsset = !hasText && hasGraphic && !hasMultiChildAutoLayout && clusters <= 1;
+  const kind = !hasText && hasImage ? "raster" : (!hasText && hasVector ? "vector" : null);
+  const firstImageFill = imageFills[0] || childInfos.find((child) => child.firstImageFill)?.firstImageFill || null;
+
+  return {
+    node,
+    childInfos,
+    bounds: getBounds(node),
+    hasText,
+    hasImage,
+    hasVector,
+    hasGraphic,
+    isCoherentAsset,
+    kind,
+    firstImageFill,
+    selfHasStroke,
+    selfHasNonImageFill: nonImageFills.length > 0,
+    visibleChildrenCount: getVisibleChildren(node).length,
+  };
+}
+
+function resolveRasterUsageHint(info) {
+  const rootNode = info.node;
+  const rootHasDecoration = info.selfHasStroke || info.selfHasNonImageFill || info.visibleChildrenCount > 0;
+  const isBareRasterNode = info.firstImageFill && !rootHasDecoration;
+
+  if (isBareRasterNode && (rootNode.type === "RECTANGLE" || rootNode.type === "FRAME")) {
+    return "img";
+  }
+
+  return "background";
+}
+
+function buildAssetExport(info) {
+  if (info.kind === "raster") {
+    const assetExport = {
+      kind: "raster",
+      preferredTool: "get_selection_png",
+      availableTools: ["get_selection_png"],
+      usageHint: resolveRasterUsageHint(info),
+    };
+    const fit = info.firstImageFill ? mapImageFit(info.firstImageFill.scaleMode) : null;
+    if (fit) assetExport.fit = fit;
+    return assetExport;
+  }
+
+  if (info.kind === "vector") {
+    return {
+      kind: "vector",
+      preferredTool: "get_selection_svg",
+      availableTools: ["get_selection_svg", "get_selection_png"],
+    };
+  }
+
+  return null;
+}
+
+function serializeAnalyzedTree(info, suppressAssetHints = false) {
+  const data = serializeNode(info.node);
+  const assetExport = info.isCoherentAsset ? buildAssetExport(info) : null;
+
+  if (!suppressAssetHints && assetExport) {
+    data.id = info.node.id;
+    data.assetExport = assetExport;
+  }
+
+  if (info.childInfos.length > 0) {
+    const children = info.childInfos
+      .map((childInfo) => serializeAnalyzedTree(childInfo, suppressAssetHints || !!assetExport))
       .filter(Boolean);
     if (children.length > 0) data.children = children;
   }
+
   return data;
 }
 
 function countNodes(tree) {
   let count = 1;
   if (tree.children) {
-    tree.children.forEach((c) => { count += countNodes(c); });
+    tree.children.forEach((child) => { count += countNodes(child); });
   }
   return count;
 }
 
-// ─── Обработка сообщений от UI (из WebSocket-моста) ────────────────
+// ─── Экспорт нод ─────────────────────────────────────────────────────────────
+
+function buildExportSettings(format, rawSettings = {}) {
+  const settings = { format };
+
+  if (typeof rawSettings.contentsOnly === "boolean") {
+    settings.contentsOnly = rawSettings.contentsOnly;
+  }
+  if (typeof rawSettings.useAbsoluteBounds === "boolean") {
+    settings.useAbsoluteBounds = rawSettings.useAbsoluteBounds;
+  }
+  if (format === "PNG" && rawSettings.constraint) {
+    settings.constraint = {
+      type: rawSettings.constraint.type,
+      value: rawSettings.constraint.value,
+    };
+  }
+  if (format === "SVG" && typeof rawSettings.svgIdAttribute === "boolean") {
+    settings.svgIdAttribute = rawSettings.svgIdAttribute;
+  }
+
+  return settings;
+}
+
+function resolveExportTargets(nodeIds) {
+  if (Array.isArray(nodeIds) && nodeIds.length > 0) {
+    return nodeIds.map((nodeId) => ({
+      nodeId,
+      node: pixso.getNodeById(nodeId),
+    }));
+  }
+
+  return pixso.currentPage.selection.map((node) => ({
+    nodeId: node.id,
+    node,
+  }));
+}
+
+async function exportNodes(params = {}) {
+  const format = params.format;
+  const settings = buildExportSettings(format, params.settings || {});
+  const targets = resolveExportTargets(params.nodeIds);
+
+  if (targets.length === 0) {
+    throw new Error("No nodes selected for export");
+  }
+
+  const items = [];
+  const failures = [];
+
+  for (const target of targets) {
+    const node = target.node;
+
+    if (!node) {
+      failures.push({ id: target.nodeId, error: "Node not found" });
+      continue;
+    }
+
+    if (node.visible === false) {
+      failures.push({ id: node.id, name: node.name, error: "Node is hidden" });
+      continue;
+    }
+
+    if (typeof node.exportAsync !== "function") {
+      failures.push({ id: node.id, name: node.name, error: "Node cannot be exported" });
+      continue;
+    }
+
+    try {
+      if (typeof node.getIsExportSizeExceeded === "function" && node.getIsExportSizeExceeded(settings)) {
+        throw new Error("Export size exceeds Pixso limit");
+      }
+
+      const bytes = await node.exportAsync(settings);
+      const info = analyzeNode(node);
+      const assetExport = buildAssetExport(info);
+      const item = {
+        id: node.id,
+        name: node.name,
+        mimeType: MIME_TYPE[format],
+        data: uint8ToBase64(bytes),
+      };
+
+      if ("width" in node) item.w = r1(node.width);
+      if ("height" in node) item.h = r1(node.height);
+      if (assetExport && assetExport.kind === "raster") {
+        item.usageHint = assetExport.usageHint;
+        if (assetExport.fit) item.fit = assetExport.fit;
+      }
+
+      items.push(item);
+    } catch (err) {
+      failures.push({
+        id: node.id,
+        name: node.name,
+        error: err instanceof Error ? err.message : String(err),
+      });
+    }
+  }
+
+  return { format, items, failures };
+}
+
+// ─── Обработка сообщений от UI (из WebSocket-моста) ─────────────────────────
 
 pixso.ui.onmessage = async (msg) => {
   if (msg.type !== "mcp-request") return;
 
-  const { id, command } = msg;
+  const { id, command, params } = msg;
   let payload;
 
   try {
@@ -404,9 +701,11 @@ pixso.ui.onmessage = async (msg) => {
       case "getSelection": {
         const selection = pixso.currentPage.selection;
         const nodes = selection
-          .map((node) => serializeTree(node))
+          .filter((node) => node.visible !== false)
+          .map((node) => serializeAnalyzedTree(analyzeNode(node)))
           .filter(Boolean);
-        const totalCount = nodes.reduce((sum, n) => sum + countNodes(n), 0);
+        const totalCount = nodes.reduce((sum, node) => sum + countNodes(node), 0);
+
         payload = { nodes };
         if (totalCount > 200) {
           payload._warning = `Large selection: ${totalCount} nodes`;
@@ -414,18 +713,22 @@ pixso.ui.onmessage = async (msg) => {
         break;
       }
 
+      case "exportNodes":
+        payload = await exportNodes(params || {});
+        break;
+
       default:
         payload = { error: `Command ${command} not supported` };
     }
   } catch (err) {
     console.error("Ошибка в main.js:", err);
-    payload = { error: err.message };
+    payload = { error: err instanceof Error ? err.message : String(err) };
   }
 
   pixso.ui.postMessage({
     type: "mcp-response",
-    id: id,
-    command: command,
-    payload: payload,
+    id,
+    command,
+    payload,
   });
 };

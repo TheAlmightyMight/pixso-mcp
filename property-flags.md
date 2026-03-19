@@ -25,8 +25,8 @@ Four possible flags:
 | 8 | `fills[].type` | Fills | Gradient (`GRADIENT_LINEAR` / `GRADIENT_RADIAL` / `GRADIENT_ANGULAR` / `GRADIENT_DIAMOND`) |
 | 9 | `fills[].stops` | Fills | Gradient fills |
 | 10 | `fills[].handles` | Fills | Gradient fills |
-| 11 | `fills[].type` IMAGE | Fills | Image fill exists |
-| 12 | `fills[].scaleMode` | Fills | Image fill (`FILL` / `FIT` / `CROP` / `TILE`) |
+| 11 | `assetExport.kind` | Asset Export | Graphics-only image/vector asset detected |
+| 12 | `assetExport.preferredTool` / `assetExport.availableTools` | Asset Export | Graphics-only image/vector asset detected |
 | 13 | `strokeW` | Strokes | Strokes exist |
 | 14 | `strokeAlign` | Strokes | Strokes exist (`INSIDE` / `OUTSIDE` / `CENTER`) |
 | 15 | `strokeTopWeight` / `strokeBottomWeight` / `strokeLeftWeight` / `strokeRightWeight` | Strokes | Any value differs from `strokeWeight` |
@@ -86,7 +86,7 @@ Four possible flags:
 
 | # | Property | Category | Rationale |
 |---|---|---|---|
-| 63 | `id` | Base | No tool consumes it; `name` suffices for identification |
+| 63 | `id` | Base | Emit only on nodes with `assetExport`, because export tools consume it |
 | 64 | `visible` | Base | Hidden nodes skipped from tree entirely |
 | 65 | `blendMode` | Transform | Too rare in typical UI; artistic effect |
 | 66 | `paragraphSpacing` | Text | Rarely needed in codegen |

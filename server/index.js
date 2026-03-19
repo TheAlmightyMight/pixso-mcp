@@ -1,10 +1,26 @@
+import { randomUUID } from "node:crypto";
+import { createMcpExpressApp } from "@modelcontextprotocol/sdk/server/express.js";
 import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { StreamableHTTPServerTransport } from "@modelcontextprotocol/sdk/server/streamableHttp.js";
-import { createMcpExpressApp } from "@modelcontextprotocol/sdk/server/express.js";
 import { isInitializeRequest } from "@modelcontextprotocol/sdk/types.js";
-import { randomUUID } from "node:crypto";
 import { startBridge } from "./bridge.js";
-import { handleToolCall } from "./tools.js";
+import {
+  buildExportToolResult,
+  getSelectionDescription,
+  getSelectionPngDescription,
+  getSelectionSvgDescription,
+  handleToolCall,
+  pngInputSchema,
+  svgInputSchema,
+} from "./tools.js";
+
+function formatToolError(error) {
+  const errorMessage = error instanceof Error ? error.message : String(error);
+  return {
+    content: [{ type: "text", text: `Ошибка: ${errorMessage}` }],
+    isError: true,
+  };
+}
 
 /**
  * Создает новый инстанс MCP сервера для каждой сессии.
@@ -15,25 +31,42 @@ function createPixsoServer() {
     version: "1.0.0",
   });
 
-  server.tool(
-    "get_selection",
-    "Возвращает полную спецификацию дизайна выделенных элементов, включая всё поддерево, стили, эффекты, макет и ограничения. Оптимизировано для генерации кода.",
-    {},
-    async () => {
-      try {
-        const data = await handleToolCall("get_selection");
-        return {
-          content: [{ type: "text", text: JSON.stringify(data) }],
-        };
-      } catch (error) {
-        const errorMessage = error instanceof Error ? error.message : String(error);
-        return {
-          content: [{ type: "text", text: `Ошибка: ${errorMessage}` }],
-          isError: true,
-        };
-      }
-    },
-  );
+  server.registerTool("get_selection", {
+    description: getSelectionDescription,
+  }, async () => {
+    try {
+      const data = await handleToolCall("get_selection");
+      return {
+        content: [{ type: "text", text: JSON.stringify(data) }],
+      };
+    } catch (error) {
+      return formatToolError(error);
+    }
+  });
+
+  server.registerTool("get_selection_png", {
+    description: getSelectionPngDescription,
+    inputSchema: pngInputSchema,
+  }, async (args) => {
+    try {
+      const data = await handleToolCall("get_selection_png", args);
+      return buildExportToolResult(data, "image/png");
+    } catch (error) {
+      return formatToolError(error);
+    }
+  });
+
+  server.registerTool("get_selection_svg", {
+    description: getSelectionSvgDescription,
+    inputSchema: svgInputSchema,
+  }, async (args) => {
+    try {
+      const data = await handleToolCall("get_selection_svg", args);
+      return buildExportToolResult(data, "image/svg+xml");
+    } catch (error) {
+      return formatToolError(error);
+    }
+  });
 
   return server;
 }
@@ -49,20 +82,18 @@ const app = createMcpExpressApp();
 const transports = new Map();
 
 /**
- * Единый эндпоинт для MCP (Streamable HTTP).
+ * Единый эндпойнт для MCP (Streamable HTTP).
  * Обрабатывает POST (инициализация и сообщения), GET (SSE) и DELETE (завершение).
  */
 app.all("/mcp", async (req, res) => {
   try {
     const sessionId = req.headers["mcp-session-id"];
-    
-    // 1. Если сессия уже существует, используем её транспорт
+
     if (sessionId && transports.has(sessionId)) {
       const transport = transports.get(sessionId);
       return await transport.handleRequest(req, res, req.body);
     }
 
-    // 2. Если это запрос на инициализацию (обычно POST), создаем новую сессию
     if (isInitializeRequest(req.body)) {
       const transport = new StreamableHTTPServerTransport({
         sessionIdGenerator: () => randomUUID(),
@@ -73,7 +104,7 @@ app.all("/mcp", async (req, res) => {
         onsessionclosed: (id) => {
           console.error(`[${new Date().toISOString()}] SSE Session closed: ${id}`);
           transports.delete(id);
-        }
+        },
       });
 
       const server = createPixsoServer();
@@ -81,32 +112,26 @@ app.all("/mcp", async (req, res) => {
       return await transport.handleRequest(req, res, req.body);
     }
 
-    // 3. Обработка проверочного POST-запроса от Cursor (Streamable HTTP check)
     if (req.method === "POST" && !sessionId) {
-      // Если это не инициализация, возвращаем 405, чтобы Cursor переключился на SSE
       return res.status(405).json({
         jsonrpc: "2.0",
         error: { code: -32000, message: "Use initialize request to start session" },
-        id: null
+        id: null,
       });
     }
 
-    // 4. Обработка GET запроса (SSE поток) без sessionId в заголовке.
-    // Если клиент шлет GET /mcp без mcp-session-id, это может быть старый SSE клиент
-    // или некорректный запрос Streamable HTTP.
     if (req.method === "GET" && !sessionId) {
       console.error(`\n[${new Date().toISOString()}] GET /mcp without session ID`);
       return res.status(400).json({
         jsonrpc: "2.0",
         error: { code: -32000, message: "Mcp-Session-Id header is required for GET requests" },
-        id: null
+        id: null,
       });
     }
 
     res.status(404).send("Not Found");
-
   } catch (error) {
-    console.error("❌ Ошибка при обработке запроса:", error);
+    console.error("Ошибка при обработке запроса:", error);
     if (!res.headersSent) {
       res.status(500).send("Internal Server Error");
     }
@@ -115,16 +140,16 @@ app.all("/mcp", async (req, res) => {
 
 const PORT = 3668;
 const httpServer = app.listen(PORT, () => {
-  console.error(`\n🚀 Pixso MCP Server запущен!`);
-  console.error(`Эндпоинт для Cursor/Claude: http://localhost:${PORT}/mcp`);
+  console.error("\nPixso MCP Server запущен!");
+  console.error(`Эндпойнт для Cursor/Claude: http://localhost:${PORT}/mcp`);
 });
 
 /**
- * Грейсфул-шатдаун (Graceful Shutdown).
+ * Graceful shutdown.
  */
 function shutdown() {
   console.error("\nОстановка серверов...");
-  
+
   wss.close(() => {
     console.error("WebSocket мост остановлен");
   });
