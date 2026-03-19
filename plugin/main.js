@@ -773,6 +773,37 @@ function countNodes(tree) {
 
 // --- Экспорт нод ---
 
+const PNG_MAGIC = [0x89, 0x50, 0x4E, 0x47]; // \x89PNG
+
+function validateExportBytes(bytes, format) {
+  if (!bytes || bytes.length === 0) {
+    return "exportAsync returned empty data";
+  }
+
+  if (format === "PNG") {
+    if (bytes.length < 8) {
+      return `PNG too small: ${bytes.length} bytes`;
+    }
+    for (let i = 0; i < 4; i++) {
+      if (bytes[i] !== PNG_MAGIC[i]) {
+        return `Invalid PNG header: expected 89504E47, got ${Array.from(bytes.slice(0, 4)).map(b => b.toString(16).padStart(2, "0")).join("")}`;
+      }
+    }
+  }
+
+  if (format === "SVG") {
+    let firstNonWS = 0;
+    while (firstNonWS < bytes.length && (bytes[firstNonWS] === 0x20 || bytes[firstNonWS] === 0x0A || bytes[firstNonWS] === 0x0D || bytes[firstNonWS] === 0x09)) {
+      firstNonWS++;
+    }
+    if (firstNonWS >= bytes.length || bytes[firstNonWS] !== 0x3C) {
+      return `SVG does not start with '<': first byte 0x${bytes[firstNonWS]?.toString(16) || "??"}`;
+    }
+  }
+
+  return null; // valid
+}
+
 function buildExportSettings(format, rawSettings = {}) {
   const settings = { format };
 
@@ -844,14 +875,32 @@ async function exportNodes(params = {}) {
         throw new Error("Export size exceeds Pixso limit");
       }
 
+      const exportStart = nowMs();
       const bytes = await node.exportAsync(settings);
+      const exportMs = nowMs() - exportStart;
+
+      const validationError = validateExportBytes(bytes, format);
+      if (validationError) {
+        throw new Error(validationError);
+      }
+
+      const encodeStart = nowMs();
+      const base64 = uint8ToBase64(bytes);
+      const encodeMs = nowMs() - encodeStart;
+
       const info = analyzeNode(node);
       const assetExport = buildAssetExport(info);
       const item = {
         id: node.id,
         name: node.name,
         mimeType: MIME_TYPE[format],
-        data: uint8ToBase64(bytes),
+        data: base64,
+        _debug: {
+          rawBytes: bytes.length,
+          base64Len: base64.length,
+          exportMs,
+          encodeMs,
+        },
       };
 
       if ("width" in node) item.w = r1(node.width);
@@ -859,6 +908,15 @@ async function exportNodes(params = {}) {
       if (assetExport && assetExport.kind === "raster") {
         item.usageHint = assetExport.usageHint;
         if (assetExport.fit) item.fit = assetExport.fit;
+      }
+
+      // For SVG, include the raw text so server can return it as text content
+      if (format === "SVG") {
+        let svgText = "";
+        for (let i = 0; i < bytes.length; i++) {
+          svgText += String.fromCharCode(bytes[i]);
+        }
+        item.svgText = svgText;
       }
 
       items.push(item);
