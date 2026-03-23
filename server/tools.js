@@ -29,20 +29,46 @@ export const getSelectionSvgDescription =
   "When `assetExport.preferredTool` is `get_selection_svg`, call this tool with `nodeIds: [node.id]`.";
 
 export const pngInputSchema = {
-  nodeIds: z.array(z.string()).min(1).optional().describe("Ids returned on exportable nodes by get_selection."),
-  contentsOnly: z.boolean().optional().describe("Trim transparent padding and export only visible contents."),
-  useAbsoluteBounds: z.boolean().optional().describe("Use absolute bounds for export instead of local bounds."),
-  constraint: z.object({
-    type: z.enum(CONSTRAINT_TYPE),
-    value: z.number().positive(),
-  }).optional().describe("PNG export size constraint."),
+  nodeIds: z
+    .array(z.string())
+    .min(1)
+    .optional()
+    .describe("Ids returned on exportable nodes by get_selection."),
+  contentsOnly: z
+    .boolean()
+    .optional()
+    .describe("Trim transparent padding and export only visible contents."),
+  useAbsoluteBounds: z
+    .boolean()
+    .optional()
+    .describe("Use absolute bounds for export instead of local bounds."),
+  constraint: z
+    .object({
+      type: z.enum(CONSTRAINT_TYPE),
+      value: z.number().positive(),
+    })
+    .optional()
+    .describe("PNG export size constraint."),
 };
 
 export const svgInputSchema = {
-  nodeIds: z.array(z.string()).min(1).optional().describe("Ids returned on exportable nodes by get_selection."),
-  contentsOnly: z.boolean().optional().describe("Trim transparent padding and export only visible contents."),
-  useAbsoluteBounds: z.boolean().optional().describe("Use absolute bounds for export instead of local bounds."),
-  svgIdAttribute: z.boolean().optional().describe("Include id attributes in the exported SVG."),
+  nodeIds: z
+    .array(z.string())
+    .min(1)
+    .optional()
+    .describe("Ids returned on exportable nodes by get_selection."),
+  contentsOnly: z
+    .boolean()
+    .optional()
+    .describe("Trim transparent padding and export only visible contents."),
+  useAbsoluteBounds: z
+    .boolean()
+    .optional()
+    .describe("Use absolute bounds for export instead of local bounds."),
+  svgIdAttribute: z
+    .boolean()
+    .optional()
+    .describe("Include id attributes in the exported SVG."),
 };
 
 export const diagnoseExportDescription =
@@ -58,14 +84,60 @@ export const getDesignTokensDescription =
   "before generating or updating CSS/Tailwind theme configuration.";
 
 export const designTokensInputSchema = {
-  mode: z.string()
+  mode: z
+    .string()
     .optional()
     .default("light")
-    .describe("Variable mode to resolve (e.g. 'light', 'dark'). Defaults to 'light'. Only affects Variables, not Styles."),
+    .describe(
+      "Variable mode to resolve (e.g. 'light', 'dark'). Defaults to 'light'. Only affects Variables, not Styles.",
+    ),
 };
 
 export const diagnoseExportInputSchema = {
-  nodeIds: z.array(z.string()).min(1).optional().describe("Specific node ids to diagnose. If omitted, uses current selection."),
+  nodeIds: z
+    .array(z.string())
+    .min(1)
+    .optional()
+    .describe(
+      "Specific node ids to diagnose. If omitted, uses current selection.",
+    ),
+};
+
+export const getPluginDebugDescription =
+  "Diagnostic tool for inspecting plugin internal state, retrieving debug event logs, " +
+  "and examining raw Pixso node properties. Use when debugging serialization issues, " +
+  "unexpected behavior, or investigating plugin state. " +
+  "Scopes: 'summary' (default) — plugin state + document info; " +
+  "'log' — recent event buffer with timings and errors; " +
+  "'inspect' — raw Pixso node properties for given nodeIds or current selection; " +
+  "'all' — summary + full log.";
+
+export const pluginDebugInputSchema = {
+  scope: z
+    .enum(["summary", "log", "inspect", "all"])
+    .optional()
+    .default("summary")
+    .describe("What data to retrieve."),
+  nodeIds: z
+    .array(z.string())
+    .min(1)
+    .optional()
+    .describe(
+      "Node ids to inspect (only for scope='inspect'). Defaults to current selection.",
+    ),
+  limit: z
+    .number()
+    .int()
+    .positive()
+    .optional()
+    .describe(
+      "Max number of log entries to return (only for scope='log' or 'all').",
+    ),
+  clear: z
+    .boolean()
+    .optional()
+    .default(false)
+    .describe("Clear the debug log buffer after reading."),
 };
 
 function unwrapPluginPayload(payload) {
@@ -78,8 +150,10 @@ function unwrapPluginPayload(payload) {
 function buildPngParams(args = {}) {
   const settings = {};
 
-  if (typeof args.contentsOnly === "boolean") settings.contentsOnly = args.contentsOnly;
-  if (typeof args.useAbsoluteBounds === "boolean") settings.useAbsoluteBounds = args.useAbsoluteBounds;
+  if (typeof args.contentsOnly === "boolean")
+    settings.contentsOnly = args.contentsOnly;
+  if (typeof args.useAbsoluteBounds === "boolean")
+    settings.useAbsoluteBounds = args.useAbsoluteBounds;
   if (args.constraint) settings.constraint = args.constraint;
 
   return {
@@ -92,9 +166,12 @@ function buildPngParams(args = {}) {
 function buildSvgParams(args = {}) {
   const settings = {};
 
-  if (typeof args.contentsOnly === "boolean") settings.contentsOnly = args.contentsOnly;
-  if (typeof args.useAbsoluteBounds === "boolean") settings.useAbsoluteBounds = args.useAbsoluteBounds;
-  if (typeof args.svgIdAttribute === "boolean") settings.svgIdAttribute = args.svgIdAttribute;
+  if (typeof args.contentsOnly === "boolean")
+    settings.contentsOnly = args.contentsOnly;
+  if (typeof args.useAbsoluteBounds === "boolean")
+    settings.useAbsoluteBounds = args.useAbsoluteBounds;
+  if (typeof args.svgIdAttribute === "boolean")
+    settings.svgIdAttribute = args.svgIdAttribute;
 
   return {
     format: "SVG",
@@ -118,7 +195,8 @@ function formatFailureLines(failures) {
 export function buildExportToolResult(payload, fallbackMimeType) {
   const items = Array.isArray(payload?.items) ? payload.items : [];
   const failures = Array.isArray(payload?.failures) ? payload.failures : [];
-  const format = payload?.format || (fallbackMimeType === "image/svg+xml" ? "SVG" : "PNG");
+  const format =
+    payload?.format || (fallbackMimeType === "image/svg+xml" ? "SVG" : "PNG");
   const content = [];
 
   content.push({
@@ -170,7 +248,10 @@ export function buildExportToolResult(payload, fallbackMimeType) {
 export function buildDiagnosticResult(pngPayload, svgPayload) {
   const report = { png: null, svg: null, issues: [] };
 
-  for (const [label, payload] of [["png", pngPayload], ["svg", svgPayload]]) {
+  for (const [label, payload] of [
+    ["png", pngPayload],
+    ["svg", svgPayload],
+  ]) {
     if (!payload) {
       report[label] = { status: "skipped" };
       continue;
@@ -202,7 +283,9 @@ export function buildDiagnosticResult(pngPayload, svgPayload) {
       if (!item.data || item.data.length === 0) {
         summary.valid = false;
         summary.validationError = "empty base64 data";
-        report.issues.push(`${label.toUpperCase()} ${item.name || item.id}: empty base64 data`);
+        report.issues.push(
+          `${label.toUpperCase()} ${item.name || item.id}: empty base64 data`,
+        );
       } else {
         summary.valid = true;
         summary.base64Len = item.data.length;
@@ -213,13 +296,20 @@ export function buildDiagnosticResult(pngPayload, svgPayload) {
           const svgText = Buffer.from(item.data, "base64").toString("utf-8");
           summary.svgTextLen = svgText.length;
           summary.svgSnippet = svgText.substring(0, 200);
-        } catch { /* ignore decode errors in diagnostics */ }
+        } catch {
+          /* ignore decode errors in diagnostics */
+        }
       }
       return summary;
     });
 
     report[label] = {
-      status: failures.length > 0 && items.length === 0 ? "failed" : items.length > 0 ? "ok" : "empty",
+      status:
+        failures.length > 0 && items.length === 0
+          ? "failed"
+          : items.length > 0
+            ? "ok"
+            : "empty",
       itemCount: items.length,
       failureCount: failures.length,
       items: itemSummaries,
@@ -227,14 +317,19 @@ export function buildDiagnosticResult(pngPayload, svgPayload) {
     };
 
     failures.forEach((f) => {
-      report.issues.push(`${label.toUpperCase()} ${f.name || f.id}: ${f.error}`);
+      report.issues.push(
+        `${label.toUpperCase()} ${f.name || f.id}: ${f.error}`,
+      );
     });
   }
 
   const text = JSON.stringify(report, null, 2);
   return {
     content: [{ type: "text", text }],
-    isError: report.issues.length > 0 && (!report.png?.itemCount) && (!report.svg?.itemCount),
+    isError:
+      report.issues.length > 0 &&
+      !report.png?.itemCount &&
+      !report.svg?.itemCount,
   };
 }
 
@@ -270,6 +365,12 @@ export function buildDesignTokensResult(payload) {
   };
 }
 
+export function buildPluginDebugResult(payload) {
+  return {
+    content: [{ type: "text", text: JSON.stringify(payload, null, 2) }],
+  };
+}
+
 /**
  * Обрабатывает вызов MCP-инструмента.
  * @param {string} name
@@ -280,9 +381,13 @@ export async function handleToolCall(name, args = {}) {
   switch (name) {
     case "get_selection":
       return unwrapPluginPayload(
-        await callPlugin("getSelection", {}, {
-          timeoutMs: DEFAULT_SELECTION_TIMEOUT_MS,
-        }),
+        await callPlugin(
+          "getSelection",
+          {},
+          {
+            timeoutMs: DEFAULT_SELECTION_TIMEOUT_MS,
+          },
+        ),
       );
     case "get_selection_png":
       return unwrapPluginPayload(
@@ -310,7 +415,9 @@ export async function handleToolCall(name, args = {}) {
           recoverOnTimeout: true,
         });
       } catch (error) {
-        pngPayload = { error: error instanceof Error ? error.message : String(error) };
+        pngPayload = {
+          error: error instanceof Error ? error.message : String(error),
+        };
       }
       try {
         svgPayload = await callPlugin("exportNodes", buildSvgParams(args), {
@@ -319,15 +426,36 @@ export async function handleToolCall(name, args = {}) {
           recoverOnTimeout: true,
         });
       } catch (error) {
-        svgPayload = { error: error instanceof Error ? error.message : String(error) };
+        svgPayload = {
+          error: error instanceof Error ? error.message : String(error),
+        };
       }
       return { _diagnostic: true, pngPayload, svgPayload };
     }
     case "get_design_tokens":
       return unwrapPluginPayload(
-        await callPlugin("getDesignTokens", { mode: args.mode || "light" }, {
-          timeoutMs: DEFAULT_SELECTION_TIMEOUT_MS,
-        }),
+        await callPlugin(
+          "getDesignTokens",
+          { mode: args.mode || "light" },
+          {
+            timeoutMs: DEFAULT_SELECTION_TIMEOUT_MS,
+          },
+        ),
+      );
+    case "get_plugin_debug_log":
+      return unwrapPluginPayload(
+        await callPlugin(
+          "getDebugInfo",
+          {
+            scope: args.scope,
+            nodeIds: args.nodeIds,
+            limit: args.limit,
+            clear: args.clear,
+          },
+          {
+            timeoutMs: DEFAULT_SELECTION_TIMEOUT_MS,
+          },
+        ),
       );
     default:
       throw new Error(`Неизвестный инструмент: ${name}`);

@@ -8,14 +8,17 @@ import {
   buildDesignTokensResult,
   buildDiagnosticResult,
   buildExportToolResult,
+  buildPluginDebugResult,
   designTokensInputSchema,
   diagnoseExportDescription,
   diagnoseExportInputSchema,
   getDesignTokensDescription,
+  getPluginDebugDescription,
   getSelectionDescription,
   getSelectionPngDescription,
   getSelectionSvgDescription,
   handleToolCall,
+  pluginDebugInputSchema,
   pngInputSchema,
   svgInputSchema,
 } from "./tools.js";
@@ -37,66 +40,102 @@ function createPixsoServer() {
     version: "1.0.0",
   });
 
-  server.registerTool("get_selection", {
-    description: getSelectionDescription,
-  }, async () => {
-    try {
-      const data = await handleToolCall("get_selection");
-      return {
-        content: [{ type: "text", text: JSON.stringify(data) }],
-      };
-    } catch (error) {
-      return formatToolError(error);
-    }
-  });
+  server.registerTool(
+    "get_selection",
+    {
+      description: getSelectionDescription,
+    },
+    async () => {
+      try {
+        const data = await handleToolCall("get_selection");
+        return {
+          content: [{ type: "text", text: JSON.stringify(data) }],
+        };
+      } catch (error) {
+        return formatToolError(error);
+      }
+    },
+  );
 
-  server.registerTool("get_selection_png", {
-    description: getSelectionPngDescription,
-    inputSchema: pngInputSchema,
-  }, async (args) => {
-    try {
-      const data = await handleToolCall("get_selection_png", args);
-      return buildExportToolResult(data, "image/png");
-    } catch (error) {
-      return formatToolError(error);
-    }
-  });
+  server.registerTool(
+    "get_selection_png",
+    {
+      description: getSelectionPngDescription,
+      inputSchema: pngInputSchema,
+    },
+    async (args) => {
+      try {
+        const data = await handleToolCall("get_selection_png", args);
+        return buildExportToolResult(data, "image/png");
+      } catch (error) {
+        return formatToolError(error);
+      }
+    },
+  );
 
-  server.registerTool("get_selection_svg", {
-    description: getSelectionSvgDescription,
-    inputSchema: svgInputSchema,
-  }, async (args) => {
-    try {
-      const data = await handleToolCall("get_selection_svg", args);
-      return buildExportToolResult(data, "image/svg+xml");
-    } catch (error) {
-      return formatToolError(error);
-    }
-  });
+  server.registerTool(
+    "get_selection_svg",
+    {
+      description: getSelectionSvgDescription,
+      inputSchema: svgInputSchema,
+    },
+    async (args) => {
+      try {
+        const data = await handleToolCall("get_selection_svg", args);
+        return buildExportToolResult(data, "image/svg+xml");
+      } catch (error) {
+        return formatToolError(error);
+      }
+    },
+  );
 
-  server.registerTool("diagnose_export", {
-    description: diagnoseExportDescription,
-    inputSchema: diagnoseExportInputSchema,
-  }, async (args) => {
-    try {
-      const data = await handleToolCall("diagnose_export", args);
-      return buildDiagnosticResult(data.pngPayload, data.svgPayload);
-    } catch (error) {
-      return formatToolError(error);
-    }
-  });
+  server.registerTool(
+    "diagnose_export",
+    {
+      description: diagnoseExportDescription,
+      inputSchema: diagnoseExportInputSchema,
+    },
+    async (args) => {
+      try {
+        const data = await handleToolCall("diagnose_export", args);
+        return buildDiagnosticResult(data.pngPayload, data.svgPayload);
+      } catch (error) {
+        return formatToolError(error);
+      }
+    },
+  );
 
-  server.registerTool("get_design_tokens", {
-    description: getDesignTokensDescription,
-    inputSchema: designTokensInputSchema,
-  }, async (args) => {
-    try {
-      const data = await handleToolCall("get_design_tokens", args);
-      return buildDesignTokensResult(data);
-    } catch (error) {
-      return formatToolError(error);
-    }
-  });
+  server.registerTool(
+    "get_design_tokens",
+    {
+      description: getDesignTokensDescription,
+      inputSchema: designTokensInputSchema,
+    },
+    async (args) => {
+      try {
+        const data = await handleToolCall("get_design_tokens", args);
+        return buildDesignTokensResult(data);
+      } catch (error) {
+        return formatToolError(error);
+      }
+    },
+  );
+
+  server.registerTool(
+    "get_plugin_debug_log",
+    {
+      description: getPluginDebugDescription,
+      inputSchema: pluginDebugInputSchema,
+    },
+    async (args) => {
+      try {
+        const data = await handleToolCall("get_plugin_debug_log", args);
+        return buildPluginDebugResult(data);
+      } catch (error) {
+        return formatToolError(error);
+      }
+    },
+  );
 
   return server;
 }
@@ -128,11 +167,15 @@ app.all("/mcp", async (req, res) => {
       const transport = new StreamableHTTPServerTransport({
         sessionIdGenerator: () => randomUUID(),
         onsessioninitialized: (id) => {
-          console.error(`[${new Date().toISOString()}] SSE Session created: ${id}`);
+          console.error(
+            `[${new Date().toISOString()}] SSE Session created: ${id}`,
+          );
           transports.set(id, transport);
         },
         onsessionclosed: (id) => {
-          console.error(`[${new Date().toISOString()}] SSE Session closed: ${id}`);
+          console.error(
+            `[${new Date().toISOString()}] SSE Session closed: ${id}`,
+          );
           transports.delete(id);
         },
       });
@@ -145,16 +188,24 @@ app.all("/mcp", async (req, res) => {
     if (req.method === "POST" && !sessionId) {
       return res.status(405).json({
         jsonrpc: "2.0",
-        error: { code: -32000, message: "Use initialize request to start session" },
+        error: {
+          code: -32000,
+          message: "Use initialize request to start session",
+        },
         id: null,
       });
     }
 
     if (req.method === "GET" && !sessionId) {
-      console.error(`\n[${new Date().toISOString()}] GET /mcp without session ID`);
+      console.error(
+        `\n[${new Date().toISOString()}] GET /mcp without session ID`,
+      );
       return res.status(400).json({
         jsonrpc: "2.0",
-        error: { code: -32000, message: "Mcp-Session-Id header is required for GET requests" },
+        error: {
+          code: -32000,
+          message: "Mcp-Session-Id header is required for GET requests",
+        },
         id: null,
       });
     }

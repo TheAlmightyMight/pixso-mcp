@@ -10,33 +10,48 @@ pixso.showUI(__html__, {
 const LAYOUT_DIR = { HORIZONTAL: "row", VERTICAL: "column" };
 
 const MAIN_ALIGN = {
-  MIN: "flex-start", MAX: "flex-end",
-  CENTER: "center", SPACE_BETWEEN: "space-between",
+  MIN: "flex-start",
+  MAX: "flex-end",
+  CENTER: "center",
+  SPACE_BETWEEN: "space-between",
 };
 
 const CROSS_ALIGN = {
-  MIN: "flex-start", MAX: "flex-end", CENTER: "center",
+  MIN: "flex-start",
+  MAX: "flex-end",
+  CENTER: "center",
 };
 
 const LAYOUT_ALIGN_MAP = { INHERIT: "auto", STRETCH: "stretch" };
 
 const TEXT_ALIGN_H = {
-  LEFT: "left", RIGHT: "right", CENTER: "center", JUSTIFIED: "justify",
+  LEFT: "left",
+  RIGHT: "right",
+  CENTER: "center",
+  JUSTIFIED: "justify",
 };
 
 const TEXT_ALIGN_V = { TOP: "top", CENTER: "center", BOTTOM: "bottom" };
 
-const TEXT_DECORATION_MAP = { UNDERLINE: "underline", STRIKETHROUGH: "line-through" };
+const TEXT_DECORATION_MAP = {
+  UNDERLINE: "underline",
+  STRIKETHROUGH: "line-through",
+};
 
-const TEXT_CASE_MAP = { UPPER: "uppercase", LOWER: "lowercase", TITLE: "capitalize" };
+const TEXT_CASE_MAP = {
+  UPPER: "uppercase",
+  LOWER: "lowercase",
+  TITLE: "capitalize",
+};
 
 const OVERFLOW_DIR = { HORIZONTAL: "x", VERTICAL: "y", BOTH: "both" };
 
 const GRADIENT_TYPE = {
-  GRADIENT_LINEAR: "linear-gradient", GRADIENT_RADIAL: "radial-gradient",
-  GRADIENT_ANGULAR: "conic-gradient", GRADIENT_DIAMOND: "diamond-gradient",
+  GRADIENT_LINEAR: "linear-gradient",
+  GRADIENT_RADIAL: "radial-gradient",
+  GRADIENT_ANGULAR: "conic-gradient",
+  GRADIENT_DIAMOND: "diamond-gradient",
 };
-
 
 const VECTOR_NODE_TYPES = new Set([
   "VECTOR",
@@ -53,8 +68,25 @@ const MIME_TYPE = {
   SVG: "image/svg+xml",
 };
 
-// --- Утилиты ---
+// --- Отладочный буфер ---
 
+const DEBUG_BUFFER_CAPACITY = 200;
+const debugBuffer = [];
+
+/**
+ * Уровни: "error", "warn", "info", "debug"
+ * Категории: "cmd", "export", "serialize", "state", "inspect"
+ */
+function debugPush(level, cat, msg, data) {
+  const entry = { ts: Date.now(), level, cat, msg };
+  if (data !== undefined) entry.data = data;
+  debugBuffer.push(entry);
+  if (debugBuffer.length > DEBUG_BUFFER_CAPACITY) {
+    debugBuffer.splice(0, debugBuffer.length - DEBUG_BUFFER_CAPACITY);
+  }
+}
+
+// --- Утилиты ---
 
 const REQUEST_STATE = {
   RECEIVED: "received",
@@ -116,7 +148,10 @@ function createRequestRecord(id, command) {
 function getRequestTimings(record) {
   const finishedAt = record.finishedAt || nowMs();
   return {
-    queuedMs: record.queuedAt && record.startedAt ? record.startedAt - record.queuedAt : 0,
+    queuedMs:
+      record.queuedAt && record.startedAt
+        ? record.startedAt - record.queuedAt
+        : 0,
     runMs: record.startedAt ? finishedAt - record.startedAt : 0,
     totalMs: finishedAt - record.receivedAt,
   };
@@ -156,6 +191,11 @@ function markDone(record, extra = {}) {
     totalMs: timings.totalMs,
     ...extra,
   });
+  debugPush("info", "cmd", `${record.command} done (${timings.totalMs}ms)`, {
+    id: record.id,
+    ...timings,
+    ...extra,
+  });
   finishRequestRecord(record);
 }
 
@@ -163,11 +203,17 @@ function markFailed(record, error, extra = {}) {
   record.state = REQUEST_STATE.FAILED;
   record.finishedAt = nowMs();
   const timings = getRequestTimings(record);
+  const errorMsg = error instanceof Error ? error.message : String(error);
   logRequestEvent(REQUEST_STATE.FAILED, record, {
     queuedMs: timings.queuedMs,
     runMs: timings.runMs,
     totalMs: timings.totalMs,
-    error: error instanceof Error ? error.message : String(error),
+    error: errorMsg,
+    ...extra,
+  });
+  debugPush("error", "cmd", `${record.command} failed: ${errorMsg}`, {
+    id: record.id,
+    ...timings,
     ...extra,
   });
   finishRequestRecord(record);
@@ -196,6 +242,7 @@ function flushExportQueue(reason) {
     postResponse(job.request, createResponsePayload(new Error(reason)));
   }
   if (flushed > 0) {
+    debugPush("warn", "export", `Queue flushed: ${flushed} job(s) — ${reason}`);
     console.error(`[pixso-mcp] flushed ${flushed} queued export(s): ${reason}`);
   }
 }
@@ -226,7 +273,9 @@ async function drainExportQueue() {
         const payload = await exportNodes(params || {});
         markDone(request, {
           itemCount: Array.isArray(payload?.items) ? payload.items.length : 0,
-          failureCount: Array.isArray(payload?.failures) ? payload.failures.length : 0,
+          failureCount: Array.isArray(payload?.failures)
+            ? payload.failures.length
+            : 0,
         });
         postResponse(request, payload);
       } catch (error) {
@@ -238,11 +287,25 @@ async function drainExportQueue() {
     exportQueueRunning = false;
   }
 }
-function r1(v) { return Math.round(v * 10) / 10; }
-function r3(v) { return Math.round(v * 1000) / 1000; }
+function r1(v) {
+  return Math.round(v * 10) / 10;
+}
+function r3(v) {
+  return Math.round(v * 1000) / 1000;
+}
 
 function toHex(r, g, b) {
-  return "#" + ((1 << 24) + (Math.round(r * 255) << 16) + (Math.round(g * 255) << 8) + Math.round(b * 255)).toString(16).slice(1);
+  return (
+    "#" +
+    (
+      (1 << 24) +
+      (Math.round(r * 255) << 16) +
+      (Math.round(g * 255) << 8) +
+      Math.round(b * 255)
+    )
+      .toString(16)
+      .slice(1)
+  );
 }
 
 function stripStylePrefix(name) {
@@ -338,7 +401,10 @@ function countGraphicClusters(node, childInfos) {
   if (childInfos.length <= 1) return childInfos.length;
 
   const nodeBounds = getBounds(node);
-  const gap = Math.max(4, Math.min(nodeBounds.w || 0, nodeBounds.h || 0) * 0.05);
+  const gap = Math.max(
+    4,
+    Math.min(nodeBounds.w || 0, nodeBounds.h || 0) * 0.05,
+  );
   const visited = new Set();
   let clusters = 0;
 
@@ -384,7 +450,8 @@ function mapImageFit(scaleMode) {
 }
 
 function uint8ToBase64(bytes) {
-  const alphabet = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/";
+  const alphabet =
+    "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/";
   const len = bytes.length;
   const remainder = len % 3;
   const mainLen = len - remainder;
@@ -424,7 +491,8 @@ function serializeFill(fill) {
 
   if (fill.type === "SOLID") {
     const data = { color: toHex(fill.color.r, fill.color.g, fill.color.b) };
-    if (fill.opacity !== undefined && fill.opacity < 1) data.opacity = fill.opacity;
+    if (fill.opacity !== undefined && fill.opacity < 1)
+      data.opacity = fill.opacity;
     return data;
   }
 
@@ -433,7 +501,10 @@ function serializeFill(fill) {
     const result = {
       type: gradType,
       stops: fill.gradientStops.map((stop) => {
-        const item = { pos: stop.position, color: toHex(stop.color.r, stop.color.g, stop.color.b) };
+        const item = {
+          pos: stop.position,
+          color: toHex(stop.color.r, stop.color.g, stop.color.b),
+        };
         if (stop.color.a < 1) item.opacity = stop.color.a;
         return item;
       }),
@@ -457,15 +528,30 @@ function serializeFill(fill) {
 function extractStyles(node, ctx) {
   const data = {};
 
-  const fillStyle = resolveStyle("fillStyleId" in node ? node.fillStyleId : null);
-  if (fillStyle) { data.fillStyleName = fillStyle; ctx.hasFillStyle = true; }
+  const fillStyle = resolveStyle(
+    "fillStyleId" in node ? node.fillStyleId : null,
+  );
+  if (fillStyle) {
+    data.fillStyleName = fillStyle;
+    ctx.hasFillStyle = true;
+  }
 
-  const strokeStyle = resolveStyle("strokeStyleId" in node ? node.strokeStyleId : null);
-  if (strokeStyle) { data.strokeStyleName = strokeStyle; ctx.hasStrokeStyle = true; }
+  const strokeStyle = resolveStyle(
+    "strokeStyleId" in node ? node.strokeStyleId : null,
+  );
+  if (strokeStyle) {
+    data.strokeStyleName = strokeStyle;
+    ctx.hasStrokeStyle = true;
+  }
 
   if (node.type === "TEXT") {
-    const textStyle = resolveStyle("textStyleId" in node ? node.textStyleId : null);
-    if (textStyle) { data.textStyleName = textStyle; ctx.hasTextStyle = true; }
+    const textStyle = resolveStyle(
+      "textStyleId" in node ? node.textStyleId : null,
+    );
+    if (textStyle) {
+      data.textStyleName = textStyle;
+      ctx.hasTextStyle = true;
+    }
   }
 
   return Object.keys(data).length > 0 ? data : null;
@@ -505,7 +591,12 @@ function extractStrokes(node, ctx) {
     const r = node.strokeRightWeight;
     const b = node.strokeBottomWeight;
     const l = node.strokeLeftWeight;
-    const uniform = "strokeWeight" in node && t === node.strokeWeight && r === node.strokeWeight && b === node.strokeWeight && l === node.strokeWeight;
+    const uniform =
+      "strokeWeight" in node &&
+      t === node.strokeWeight &&
+      r === node.strokeWeight &&
+      b === node.strokeWeight &&
+      l === node.strokeWeight;
     if (uniform) {
       data.strokeW = node.strokeWeight;
     } else {
@@ -546,7 +637,10 @@ function extractText(node, ctx) {
     }
   }
 
-  if ("textAlignHorizontal" in node && node.textAlignHorizontal !== pixso.mixed) {
+  if (
+    "textAlignHorizontal" in node &&
+    node.textAlignHorizontal !== pixso.mixed
+  ) {
     const value = TEXT_ALIGN_H[node.textAlignHorizontal];
     if (value && value !== "left") data.textAlign = value;
   }
@@ -598,7 +692,8 @@ function extractEffects(node) {
 function extractTransform(node) {
   const data = {};
   if ("opacity" in node && node.opacity < 1) data.opacity = node.opacity;
-  if ("rotation" in node && node.rotation !== 0) data.rotation = r1(node.rotation);
+  if ("rotation" in node && node.rotation !== 0)
+    data.rotation = r1(node.rotation);
   return Object.keys(data).length > 0 ? data : null;
 }
 
@@ -609,10 +704,22 @@ function extractCornerRadius(node) {
   }
   const data = {};
   let has = false;
-  if ("topLeftRadius" in node && node.topLeftRadius) { data.topLeftRadius = node.topLeftRadius; has = true; }
-  if ("topRightRadius" in node && node.topRightRadius) { data.topRightRadius = node.topRightRadius; has = true; }
-  if ("bottomLeftRadius" in node && node.bottomLeftRadius) { data.bottomLeftRadius = node.bottomLeftRadius; has = true; }
-  if ("bottomRightRadius" in node && node.bottomRightRadius) { data.bottomRightRadius = node.bottomRightRadius; has = true; }
+  if ("topLeftRadius" in node && node.topLeftRadius) {
+    data.topLeftRadius = node.topLeftRadius;
+    has = true;
+  }
+  if ("topRightRadius" in node && node.topRightRadius) {
+    data.topRightRadius = node.topRightRadius;
+    has = true;
+  }
+  if ("bottomLeftRadius" in node && node.bottomLeftRadius) {
+    data.bottomLeftRadius = node.bottomLeftRadius;
+    has = true;
+  }
+  if ("bottomRightRadius" in node && node.bottomRightRadius) {
+    data.bottomRightRadius = node.bottomRightRadius;
+    has = true;
+  }
   return has ? data : null;
 }
 
@@ -622,13 +729,24 @@ function extractAutoLayout(node) {
 
   if (node.itemSpacing) data.gap = node.itemSpacing;
 
-  const padding = [node.paddingTop || 0, node.paddingRight || 0, node.paddingBottom || 0, node.paddingLeft || 0];
+  const padding = [
+    node.paddingTop || 0,
+    node.paddingRight || 0,
+    node.paddingBottom || 0,
+    node.paddingLeft || 0,
+  ];
   if (padding.some((value) => value > 0)) data.padding = padding;
 
-  if ("primaryAxisAlignItems" in node) data.mainAlign = MAIN_ALIGN[node.primaryAxisAlignItems] || node.primaryAxisAlignItems;
-  if ("counterAxisAlignItems" in node) data.crossAlign = CROSS_ALIGN[node.counterAxisAlignItems] || node.counterAxisAlignItems;
-  if ("primaryAxisSizingMode" in node) data.mainSize = node.primaryAxisSizingMode;
-  if ("counterAxisSizingMode" in node) data.crossSize = node.counterAxisSizingMode;
+  if ("primaryAxisAlignItems" in node)
+    data.mainAlign =
+      MAIN_ALIGN[node.primaryAxisAlignItems] || node.primaryAxisAlignItems;
+  if ("counterAxisAlignItems" in node)
+    data.crossAlign =
+      CROSS_ALIGN[node.counterAxisAlignItems] || node.counterAxisAlignItems;
+  if ("primaryAxisSizingMode" in node)
+    data.mainSize = node.primaryAxisSizingMode;
+  if ("counterAxisSizingMode" in node)
+    data.crossSize = node.counterAxisSizingMode;
 
   if ("layoutWrap" in node && node.layoutWrap === "WRAP") {
     data.layoutWrap = "wrap";
@@ -686,7 +804,10 @@ const PROFILES = {
 
 function serializeNode(node) {
   const ctx = {};
-  return Object.assign({}, ...PROFILES.codegen.map((extractor) => extractor(node, ctx) || {}));
+  return Object.assign(
+    {},
+    ...PROFILES.codegen.map((extractor) => extractor(node, ctx) || {}),
+  );
 }
 
 function analyzeNode(node) {
@@ -700,18 +821,30 @@ function analyzeNode(node) {
   const nonImageFills = fills.filter((fill) => fill.type !== "IMAGE");
   const selfHasVectorType = VECTOR_NODE_TYPES.has(node.type);
   const selfHasStroke = strokes.length > 0;
-  const selfHasVectorPaint = nonImageFills.length > 0 || selfHasStroke || selfHasVectorType;
+  const selfHasVectorPaint =
+    nonImageFills.length > 0 || selfHasStroke || selfHasVectorType;
 
-  const hasText = node.type === "TEXT" || childInfos.some((child) => child.hasText);
-  const hasImage = imageFills.length > 0 || childInfos.some((child) => child.hasImage);
-  const hasVector = selfHasVectorPaint || childInfos.some((child) => child.hasVector);
+  const hasText =
+    node.type === "TEXT" || childInfos.some((child) => child.hasText);
+  const hasImage =
+    imageFills.length > 0 || childInfos.some((child) => child.hasImage);
+  const hasVector =
+    selfHasVectorPaint || childInfos.some((child) => child.hasVector);
   const hasGraphic = hasImage || hasVector;
   const graphicChildren = childInfos.filter((child) => child.hasGraphic);
   const clusters = countGraphicClusters(node, graphicChildren);
-  const hasMultiChildAutoLayout = "layoutMode" in node && node.layoutMode !== "NONE" && getVisibleChildren(node).length > 1;
-  const isCoherentAsset = !hasText && hasGraphic && !hasMultiChildAutoLayout && clusters <= 1;
-  const kind = !hasText && hasImage ? "raster" : (!hasText && hasVector ? "vector" : null);
-  const firstImageFill = imageFills[0] || childInfos.find((child) => child.firstImageFill)?.firstImageFill || null;
+  const hasMultiChildAutoLayout =
+    "layoutMode" in node &&
+    node.layoutMode !== "NONE" &&
+    getVisibleChildren(node).length > 1;
+  const isCoherentAsset =
+    !hasText && hasGraphic && !hasMultiChildAutoLayout && clusters <= 1;
+  const kind =
+    !hasText && hasImage ? "raster" : !hasText && hasVector ? "vector" : null;
+  const firstImageFill =
+    imageFills[0] ||
+    childInfos.find((child) => child.firstImageFill)?.firstImageFill ||
+    null;
 
   return {
     node,
@@ -732,10 +865,16 @@ function analyzeNode(node) {
 
 function resolveRasterUsageHint(info) {
   const rootNode = info.node;
-  const rootHasDecoration = info.selfHasStroke || info.selfHasNonImageFill || info.visibleChildrenCount > 0;
+  const rootHasDecoration =
+    info.selfHasStroke ||
+    info.selfHasNonImageFill ||
+    info.visibleChildrenCount > 0;
   const isBareRasterNode = info.firstImageFill && !rootHasDecoration;
 
-  if (isBareRasterNode && (rootNode.type === "RECTANGLE" || rootNode.type === "FRAME")) {
+  if (
+    isBareRasterNode &&
+    (rootNode.type === "RECTANGLE" || rootNode.type === "FRAME")
+  ) {
     return "img";
   }
 
@@ -750,7 +889,9 @@ function buildAssetExport(info) {
       availableTools: ["get_selection_png"],
       usageHint: resolveRasterUsageHint(info),
     };
-    const fit = info.firstImageFill ? mapImageFit(info.firstImageFill.scaleMode) : null;
+    const fit = info.firstImageFill
+      ? mapImageFit(info.firstImageFill.scaleMode)
+      : null;
     if (fit) assetExport.fit = fit;
     return assetExport;
   }
@@ -777,7 +918,9 @@ function serializeAnalyzedTree(info, suppressAssetHints = false) {
 
   if (info.childInfos.length > 0) {
     const children = info.childInfos
-      .map((childInfo) => serializeAnalyzedTree(childInfo, suppressAssetHints || !!assetExport))
+      .map((childInfo) =>
+        serializeAnalyzedTree(childInfo, suppressAssetHints || !!assetExport),
+      )
       .filter(Boolean);
     if (children.length > 0) data.children = children;
   }
@@ -788,14 +931,16 @@ function serializeAnalyzedTree(info, suppressAssetHints = false) {
 function countNodes(tree) {
   let count = 1;
   if (tree.children) {
-    tree.children.forEach((child) => { count += countNodes(child); });
+    tree.children.forEach((child) => {
+      count += countNodes(child);
+    });
   }
   return count;
 }
 
 // --- Экспорт нод ---
 
-const PNG_MAGIC = [0x89, 0x50, 0x4E, 0x47]; // \x89PNG
+const PNG_MAGIC = [0x89, 0x50, 0x4e, 0x47]; // \x89PNG
 
 function validateExportBytes(bytes, format) {
   if (!bytes || bytes.length === 0) {
@@ -808,17 +953,27 @@ function validateExportBytes(bytes, format) {
     }
     for (let i = 0; i < 4; i++) {
       if (bytes[i] !== PNG_MAGIC[i]) {
-        return `Invalid PNG header: expected 89504E47, got ${Array.from(bytes.slice(0, 4)).map(b => b.toString(16).padStart(2, "0")).join("")}`;
+        return `Invalid PNG header: expected 89504E47, got ${Array.from(
+          bytes.slice(0, 4),
+        )
+          .map((b) => b.toString(16).padStart(2, "0"))
+          .join("")}`;
       }
     }
   }
 
   if (format === "SVG") {
     let firstNonWS = 0;
-    while (firstNonWS < bytes.length && (bytes[firstNonWS] === 0x20 || bytes[firstNonWS] === 0x0A || bytes[firstNonWS] === 0x0D || bytes[firstNonWS] === 0x09)) {
+    while (
+      firstNonWS < bytes.length &&
+      (bytes[firstNonWS] === 0x20 ||
+        bytes[firstNonWS] === 0x0a ||
+        bytes[firstNonWS] === 0x0d ||
+        bytes[firstNonWS] === 0x09)
+    ) {
       firstNonWS++;
     }
-    if (firstNonWS >= bytes.length || bytes[firstNonWS] !== 0x3C) {
+    if (firstNonWS >= bytes.length || bytes[firstNonWS] !== 0x3c) {
       return `SVG does not start with '<': first byte 0x${bytes[firstNonWS]?.toString(16) || "??"}`;
     }
   }
@@ -888,12 +1043,19 @@ async function exportNodes(params = {}) {
     }
 
     if (typeof node.exportAsync !== "function") {
-      failures.push({ id: node.id, name: node.name, error: "Node cannot be exported" });
+      failures.push({
+        id: node.id,
+        name: node.name,
+        error: "Node cannot be exported",
+      });
       continue;
     }
 
     try {
-      if (typeof node.getIsExportSizeExceeded === "function" && node.getIsExportSizeExceeded(settings)) {
+      if (
+        typeof node.getIsExportSizeExceeded === "function" &&
+        node.getIsExportSizeExceeded(settings)
+      ) {
         throw new Error("Export size exceeds Pixso limit");
       }
 
@@ -936,11 +1098,18 @@ async function exportNodes(params = {}) {
       // to avoid doubling payload size through WebSocket
 
       items.push(item);
-    } catch (err) {
-      failures.push({
+      debugPush("debug", "export", `Exported ${node.name} (${format})`, {
         id: node.id,
-        name: node.name,
-        error: err instanceof Error ? err.message : String(err),
+        rawBytes: bytes.length,
+        exportMs,
+        encodeMs,
+      });
+    } catch (err) {
+      const errMsg = err instanceof Error ? err.message : String(err);
+      failures.push({ id: node.id, name: node.name, error: errMsg });
+      debugPush("error", "export", `Export failed: ${node.name} — ${errMsg}`, {
+        id: node.id,
+        format,
       });
     }
   }
@@ -953,11 +1122,22 @@ async function exportNodes(params = {}) {
 const MAX_ALIAS_DEPTH = 10;
 
 function toHexToken(r, g, b) {
-  return "#" + ((1 << 24) + (Math.round(r * 255) << 16) + (Math.round(g * 255) << 8) + Math.round(b * 255)).toString(16).slice(1);
+  return (
+    "#" +
+    (
+      (1 << 24) +
+      (Math.round(r * 255) << 16) +
+      (Math.round(g * 255) << 8) +
+      Math.round(b * 255)
+    )
+      .toString(16)
+      .slice(1)
+  );
 }
 
 function colorToToken(color, opacity) {
-  const a = opacity !== undefined ? opacity : (color.a !== undefined ? color.a : 1);
+  const a =
+    opacity !== undefined ? opacity : color.a !== undefined ? color.a : 1;
   const hex = toHexToken(color.r, color.g, color.b);
   if (a < 1) {
     return `rgba(${Math.round(color.r * 255)},${Math.round(color.g * 255)},${Math.round(color.b * 255)},${r3(a)})`;
@@ -969,7 +1149,11 @@ function setNested(obj, segments, value) {
   let current = obj;
   for (let i = 0; i < segments.length - 1; i++) {
     const key = segments[i];
-    if (!(key in current) || typeof current[key] !== "object" || current[key] === null) {
+    if (
+      !(key in current) ||
+      typeof current[key] !== "object" ||
+      current[key] === null
+    ) {
       current[key] = {};
     }
     current = current[key];
@@ -984,7 +1168,9 @@ function insertToken(target, path, value) {
 }
 
 function extractPaintTokens(style) {
-  const paints = Array.isArray(style.paints) ? style.paints.filter((p) => p.visible !== false) : [];
+  const paints = Array.isArray(style.paints)
+    ? style.paints.filter((p) => p.visible !== false)
+    : [];
   const nonImage = paints.filter((p) => p.type !== "IMAGE");
   if (nonImage.length === 0) return null;
 
@@ -1006,20 +1192,23 @@ function extractPaintTokens(style) {
     return null;
   }
 
-  return nonImage.map((paint) => {
-    if (paint.type === "SOLID") return colorToToken(paint.color, paint.opacity);
-    const gradType = GRADIENT_TYPE[paint.type];
-    if (gradType) {
-      return {
-        type: gradType,
-        stops: paint.gradientStops.map((stop) => ({
-          color: colorToToken(stop.color, stop.color.a),
-          position: stop.position,
-        })),
-      };
-    }
-    return null;
-  }).filter(Boolean);
+  return nonImage
+    .map((paint) => {
+      if (paint.type === "SOLID")
+        return colorToToken(paint.color, paint.opacity);
+      const gradType = GRADIENT_TYPE[paint.type];
+      if (gradType) {
+        return {
+          type: gradType,
+          stops: paint.gradientStops.map((stop) => ({
+            color: colorToToken(stop.color, stop.color.a),
+            position: stop.position,
+          })),
+        };
+      }
+      return null;
+    })
+    .filter(Boolean);
 }
 
 function extractTextToken(style) {
@@ -1028,7 +1217,11 @@ function extractTextToken(style) {
   if ("fontSize" in style && style.fontSize !== pixso.mixed) {
     token.fontSize = style.fontSize;
   }
-  if ("fontName" in style && style.fontName !== pixso.mixed && style.fontName.family) {
+  if (
+    "fontName" in style &&
+    style.fontName !== pixso.mixed &&
+    style.fontName.family
+  ) {
     token.fontFamily = style.fontName.family;
     const weight = resolveFontWeight(style.fontName);
     if (weight) {
@@ -1045,7 +1238,8 @@ function extractTextToken(style) {
   if ("letterSpacing" in style && style.letterSpacing !== pixso.mixed) {
     const ls = style.letterSpacing;
     if (ls.unit === "PIXELS" && ls.value !== 0) token.letterSpacing = ls.value;
-    else if (ls.unit === "PERCENT" && ls.value !== 0) token.letterSpacing = r3(ls.value / 100);
+    else if (ls.unit === "PERCENT" && ls.value !== 0)
+      token.letterSpacing = r3(ls.value / 100);
   }
   if ("textCase" in style && style.textCase !== pixso.mixed) {
     const value = TEXT_CASE_MAP[style.textCase];
@@ -1060,26 +1254,30 @@ function extractTextToken(style) {
 }
 
 function extractEffectToken(style) {
-  const effects = Array.isArray(style.effects) ? style.effects.filter((e) => e.visible !== false) : [];
+  const effects = Array.isArray(style.effects)
+    ? style.effects.filter((e) => e.visible !== false)
+    : [];
   if (effects.length === 0) return null;
 
-  return effects.map((effect) => {
-    if (effect.type === "DROP_SHADOW" || effect.type === "INNER_SHADOW") {
-      const data = {
-        type: effect.type,
-        x: effect.offset.x,
-        y: effect.offset.y,
-        blur: effect.radius,
-        color: colorToToken(effect.color, effect.color.a),
-      };
-      if (effect.spread) data.spread = effect.spread;
-      return data;
-    }
-    if (effect.type === "LAYER_BLUR" || effect.type === "BACKGROUND_BLUR") {
-      return { type: effect.type, radius: effect.radius };
-    }
-    return null;
-  }).filter(Boolean);
+  return effects
+    .map((effect) => {
+      if (effect.type === "DROP_SHADOW" || effect.type === "INNER_SHADOW") {
+        const data = {
+          type: effect.type,
+          x: effect.offset.x,
+          y: effect.offset.y,
+          blur: effect.radius,
+          color: colorToToken(effect.color, effect.color.a),
+        };
+        if (effect.spread) data.spread = effect.spread;
+        return data;
+      }
+      if (effect.type === "LAYER_BLUR" || effect.type === "BACKGROUND_BLUR") {
+        return { type: effect.type, radius: effect.radius };
+      }
+      return null;
+    })
+    .filter(Boolean);
 }
 
 function findModeId(collection, requestedMode) {
@@ -1095,18 +1293,31 @@ async function resolveVariableValue(variable, modeId, modeName, warnings) {
   for (let depth = 0; depth < MAX_ALIAS_DEPTH; depth++) {
     const value = current.valuesByMode[currentModeId];
     if (value === undefined) {
-      const collection = await pixso.variables.getVariableCollectionByIdAsync(current.variableCollectionId);
+      const collection = await pixso.variables.getVariableCollectionByIdAsync(
+        current.variableCollectionId,
+      );
       if (!collection) return undefined;
       const fallbackValue = current.valuesByMode[collection.defaultModeId];
       if (fallbackValue === undefined) return undefined;
-      if (fallbackValue && typeof fallbackValue === "object" && fallbackValue.type === "VARIABLE_ALIAS") {
+      if (
+        fallbackValue &&
+        typeof fallbackValue === "object" &&
+        fallbackValue.type === "VARIABLE_ALIAS"
+      ) {
         current = await pixso.variables.getVariableByIdAsync(fallbackValue.id);
         if (!current) {
-          warnings.push(`Не удалось разрешить алиас: ${variable.name} → ${fallbackValue.id}`);
+          warnings.push(
+            `Не удалось разрешить алиас: ${variable.name} → ${fallbackValue.id}`,
+          );
           return undefined;
         }
-        const targetCollection = await pixso.variables.getVariableCollectionByIdAsync(current.variableCollectionId);
-        currentModeId = targetCollection ? findModeId(targetCollection, modeName) : current.variableCollectionId;
+        const targetCollection =
+          await pixso.variables.getVariableCollectionByIdAsync(
+            current.variableCollectionId,
+          );
+        currentModeId = targetCollection
+          ? findModeId(targetCollection, modeName)
+          : current.variableCollectionId;
         continue;
       }
       return fallbackValue;
@@ -1115,23 +1326,37 @@ async function resolveVariableValue(variable, modeId, modeName, warnings) {
     if (value && typeof value === "object" && value.type === "VARIABLE_ALIAS") {
       current = await pixso.variables.getVariableByIdAsync(value.id);
       if (!current) {
-        warnings.push(`Не удалось разрешить алиас: ${variable.name} → ${value.id}`);
+        warnings.push(
+          `Не удалось разрешить алиас: ${variable.name} → ${value.id}`,
+        );
         return undefined;
       }
-      const targetCollection = await pixso.variables.getVariableCollectionByIdAsync(current.variableCollectionId);
-      currentModeId = targetCollection ? findModeId(targetCollection, modeName) : currentModeId;
+      const targetCollection =
+        await pixso.variables.getVariableCollectionByIdAsync(
+          current.variableCollectionId,
+        );
+      currentModeId = targetCollection
+        ? findModeId(targetCollection, modeName)
+        : currentModeId;
       continue;
     }
 
     return value;
   }
 
-  warnings.push(`Превышена глубина разрешения алиасов (макс ${MAX_ALIAS_DEPTH}): ${variable.name}`);
+  warnings.push(
+    `Превышена глубина разрешения алиасов (макс ${MAX_ALIAS_DEPTH}): ${variable.name}`,
+  );
   return undefined;
 }
 
 function convertVariableValue(resolvedType, value) {
-  if (resolvedType === "COLOR" && value && typeof value === "object" && "r" in value) {
+  if (
+    resolvedType === "COLOR" &&
+    value &&
+    typeof value === "object" &&
+    "r" in value
+  ) {
     return colorToToken(value, value.a);
   }
   return value;
@@ -1144,7 +1369,12 @@ async function getDesignTokens(params) {
   const typography = {};
   const effects = {};
   const variables = {};
-  const sources = { paintStyles: 0, textStyles: 0, effectStyles: 0, variables: 0 };
+  const sources = {
+    paintStyles: 0,
+    textStyles: 0,
+    effectStyles: 0,
+    variables: 0,
+  };
   const allModeNames = new Set();
 
   const paintStyles = pixso.getLocalPaintStyles();
@@ -1169,8 +1399,12 @@ async function getDesignTokens(params) {
   }
 
   try {
-    if (pixso.variables && typeof pixso.variables.getLocalVariableCollectionsAsync === "function") {
-      const collections = await pixso.variables.getLocalVariableCollectionsAsync();
+    if (
+      pixso.variables &&
+      typeof pixso.variables.getLocalVariableCollectionsAsync === "function"
+    ) {
+      const collections =
+        await pixso.variables.getLocalVariableCollectionsAsync();
       const allVars = await pixso.variables.getLocalVariablesAsync();
 
       const collectionMap = new Map();
@@ -1188,7 +1422,12 @@ async function getDesignTokens(params) {
         if (!collection) continue;
 
         const modeId = findModeId(collection, requestedMode);
-        const rawValue = await resolveVariableValue(variable, modeId, requestedMode, warnings);
+        const rawValue = await resolveVariableValue(
+          variable,
+          modeId,
+          requestedMode,
+          warnings,
+        );
         if (rawValue === undefined) continue;
 
         const value = convertVariableValue(variable.resolvedType, rawValue);
@@ -1202,7 +1441,9 @@ async function getDesignTokens(params) {
       }
     }
   } catch (err) {
-    warnings.push(`Variables API недоступен: ${err instanceof Error ? err.message : String(err)}`);
+    warnings.push(
+      `Variables API недоступен: ${err instanceof Error ? err.message : String(err)}`,
+    );
   }
 
   return {
@@ -1217,10 +1458,186 @@ async function getDesignTokens(params) {
   };
 }
 
+// --- Отладка: инспекция нод и сбор состояния ---
+
+const INSPECTABLE_PROPS = [
+  "id",
+  "name",
+  "type",
+  "visible",
+  "locked",
+  "x",
+  "y",
+  "width",
+  "height",
+  "rotation",
+  "fills",
+  "strokes",
+  "fillStyleId",
+  "strokeStyleId",
+  "strokeWeight",
+  "strokeTopWeight",
+  "strokeRightWeight",
+  "strokeBottomWeight",
+  "strokeLeftWeight",
+  "strokeAlign",
+  "effects",
+  "opacity",
+  "blendMode",
+  "cornerRadius",
+  "topLeftRadius",
+  "topRightRadius",
+  "bottomLeftRadius",
+  "bottomRightRadius",
+  "layoutMode",
+  "primaryAxisAlignItems",
+  "counterAxisAlignItems",
+  "primaryAxisSizingMode",
+  "counterAxisSizingMode",
+  "paddingTop",
+  "paddingRight",
+  "paddingBottom",
+  "paddingLeft",
+  "itemSpacing",
+  "layoutWrap",
+  "counterAxisSpacing",
+  "layoutAlign",
+  "layoutGrow",
+  "characters",
+  "fontSize",
+  "fontName",
+  "textAlignHorizontal",
+  "textAlignVertical",
+  "textDecoration",
+  "textCase",
+  "lineHeight",
+  "letterSpacing",
+  "textAutoResize",
+  "textStyleId",
+  "overflowDirection",
+  "clipsContent",
+  "constraints",
+  "exportSettings",
+];
+
+function inspectNodeProperties(node) {
+  const result = {};
+  for (const prop of INSPECTABLE_PROPS) {
+    try {
+      if (!(prop in node)) continue;
+      const val = node[prop];
+      if (val === pixso.mixed) {
+        result[prop] = "<mixed>";
+      } else if (prop === "fills" || prop === "strokes" || prop === "effects") {
+        result[prop] = JSON.parse(JSON.stringify(val));
+      } else if (typeof val === "object" && val !== null) {
+        result[prop] = JSON.parse(JSON.stringify(val));
+      } else {
+        result[prop] = val;
+      }
+    } catch (err) {
+      result[prop] =
+        `<error: ${err instanceof Error ? err.message : String(err)}>`;
+    }
+  }
+
+  try {
+    if ("children" in node && Array.isArray(node.children)) {
+      result._children = node.children.map((c) => ({
+        id: c.id,
+        name: c.name,
+        type: c.type,
+        visible: c.visible,
+      }));
+    }
+  } catch {
+    /* sandbox может ограничить доступ */
+  }
+
+  try {
+    if (node.parent) {
+      result._parentId = node.parent.id;
+      result._parentType = node.parent.type;
+    }
+  } catch {
+    /* игнорируем */
+  }
+
+  return result;
+}
+
+function getPluginState() {
+  const state = {
+    pendingRequests: requestRecords.size,
+    pendingRequestIds: Array.from(requestRecords.keys()),
+    exportQueueLength: exportQueue.length,
+    exportQueueRunning,
+    debugBufferSize: debugBuffer.length,
+    debugBufferCapacity: DEBUG_BUFFER_CAPACITY,
+  };
+
+  try {
+    state.document = {
+      name: pixso.root?.name || null,
+      currentPage: pixso.currentPage?.name || null,
+      selectionCount: pixso.currentPage?.selection?.length || 0,
+      selectionSummary: (pixso.currentPage?.selection || []).map((n) => ({
+        id: n.id,
+        name: n.name,
+        type: n.type,
+      })),
+    };
+  } catch (err) {
+    state.document = {
+      error: err instanceof Error ? err.message : String(err),
+    };
+  }
+
+  return state;
+}
+
+function getDebugInfo(params = {}) {
+  const scope = params.scope || "summary";
+  const result = {};
+
+  if (scope === "summary" || scope === "all") {
+    result.state = getPluginState();
+  }
+
+  if (scope === "log" || scope === "all") {
+    const limit =
+      typeof params.limit === "number" ? params.limit : debugBuffer.length;
+    result.log = debugBuffer.slice(-limit);
+    if (params.clear) debugBuffer.length = 0;
+  }
+
+  if (scope === "inspect") {
+    const nodeIds = params.nodeIds;
+    let nodes;
+    if (Array.isArray(nodeIds) && nodeIds.length > 0) {
+      nodes = nodeIds.map((id) => pixso.getNodeById(id)).filter(Boolean);
+    } else {
+      nodes = pixso.currentPage?.selection || [];
+    }
+    result.state = getPluginState();
+    result.inspectedNodes = nodes.map((node) => inspectNodeProperties(node));
+    debugPush("info", "inspect", `Inspected ${nodes.length} node(s)`, {
+      nodeIds: nodes.map((n) => n.id),
+    });
+  }
+
+  return result;
+}
+
 // --- Обработка сообщений от UI (из WebSocket-моста) ---
 
 pixso.ui.onmessage = async (msg) => {
   if (msg.type === "mcp-bridge-reconnect") {
+    debugPush(
+      "warn",
+      "state",
+      "Bridge reconnected — flushing stale export queue",
+    );
     flushExportQueue("bridge reconnected — stale requests discarded");
     return;
   }
@@ -1241,15 +1658,28 @@ pixso.ui.onmessage = async (msg) => {
     switch (command) {
       case "getSelection": {
         const selection = pixso.currentPage.selection;
+        debugPush(
+          "info",
+          "cmd",
+          `getSelection: ${selection.length} top-level node(s) selected`,
+        );
         const nodes = selection
           .filter((node) => node.visible !== false)
           .map((node) => serializeAnalyzedTree(analyzeNode(node)))
           .filter(Boolean);
-        const totalCount = nodes.reduce((sum, node) => sum + countNodes(node), 0);
+        const totalCount = nodes.reduce(
+          (sum, node) => sum + countNodes(node),
+          0,
+        );
 
         const payload = { nodes };
         if (totalCount > 200) {
           payload._warning = `Large selection: ${totalCount} nodes`;
+          debugPush(
+            "warn",
+            "cmd",
+            `Large selection: ${totalCount} total nodes`,
+          );
         }
 
         markDone(request, {
@@ -1269,6 +1699,13 @@ pixso.ui.onmessage = async (msg) => {
           variables: tokensPayload.meta.sources.variables,
         });
         postResponse(request, tokensPayload);
+        break;
+      }
+
+      case "getDebugInfo": {
+        const debugPayload = getDebugInfo(params || {});
+        markDone(request, { scope: (params || {}).scope || "summary" });
+        postResponse(request, debugPayload);
         break;
       }
 
