@@ -5,10 +5,13 @@ import { StreamableHTTPServerTransport } from "@modelcontextprotocol/sdk/server/
 import { isInitializeRequest } from "@modelcontextprotocol/sdk/types.js";
 import { startBridge } from "./bridge.js";
 import {
+  buildDesignTokensResult,
   buildDiagnosticResult,
   buildExportToolResult,
+  designTokensInputSchema,
   diagnoseExportDescription,
   diagnoseExportInputSchema,
+  getDesignTokensDescription,
   getSelectionDescription,
   getSelectionPngDescription,
   getSelectionSvgDescription,
@@ -78,6 +81,18 @@ function createPixsoServer() {
     try {
       const data = await handleToolCall("diagnose_export", args);
       return buildDiagnosticResult(data.pngPayload, data.svgPayload);
+    } catch (error) {
+      return formatToolError(error);
+    }
+  });
+
+  server.registerTool("get_design_tokens", {
+    description: getDesignTokensDescription,
+    inputSchema: designTokensInputSchema,
+  }, async (args) => {
+    try {
+      const data = await handleToolCall("get_design_tokens", args);
+      return buildDesignTokensResult(data);
     } catch (error) {
       return formatToolError(error);
     }

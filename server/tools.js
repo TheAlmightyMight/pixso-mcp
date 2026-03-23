@@ -51,6 +51,19 @@ export const diagnoseExportDescription =
   "Use this when export tools produce errors, timeouts, or invalid images. " +
   "Does NOT return image data — only diagnostic metadata.";
 
+export const getDesignTokensDescription =
+  "Extracts design tokens (colors, typography, effects) from the currently open Pixso file. " +
+  "Returns structured JSON with all tokens organized into nested categories based on style/variable naming conventions. " +
+  "Use this to understand the design system's color palette, typographic scale, and effect library " +
+  "before generating or updating CSS/Tailwind theme configuration.";
+
+export const designTokensInputSchema = {
+  mode: z.string()
+    .optional()
+    .default("light")
+    .describe("Variable mode to resolve (e.g. 'light', 'dark'). Defaults to 'light'. Only affects Variables, not Styles."),
+};
+
 export const diagnoseExportInputSchema = {
   nodeIds: z.array(z.string()).min(1).optional().describe("Specific node ids to diagnose. If omitted, uses current selection."),
 };
@@ -225,6 +238,38 @@ export function buildDiagnosticResult(pngPayload, svgPayload) {
   };
 }
 
+const DESIGN_TOKENS_GUIDE = `## Design Tokens — Interpretation Guide
+
+This JSON contains design tokens extracted from a Pixso design file.
+
+### Structure
+- \`meta\` — file info, requested mode, available modes, token source counts, and warnings.
+- \`tokens.colors\` — color palette. Leaf values are hex strings ("#3B82F6") or rgba() for semi-transparent colors. Nesting reflects the designer's grouping (e.g., primary/500 → { primary: { 500: "#..." } }).
+- \`tokens.typography\` — text styles. Each leaf is an object with fontSize (px), fontFamily, fontWeight (100–900), lineHeight (unitless ratio for %, "normal" for auto, or number in px), letterSpacing (em for %, px for pixel values).
+- \`tokens.effects\` — shadow and blur definitions. Each style is an array of effects. Shadows have x/y/blur/spread (px) and color. Blurs have radius (px).
+- \`tokens.variables\` — other design tokens (spacing, radii, booleans, strings) grouped by their variable collection name.
+
+### Mapping to Tailwind CSS
+- \`tokens.colors\` → \`theme.extend.colors\` — use the nested keys directly as Tailwind color names.
+- \`tokens.typography\` → \`theme.extend.fontSize\`, \`theme.extend.fontFamily\`, \`theme.extend.fontWeight\`, \`theme.extend.lineHeight\`, \`theme.extend.letterSpacing\`.
+- \`tokens.effects\` → \`theme.extend.boxShadow\` (for shadows), \`theme.extend.blur\` / \`theme.extend.backdropBlur\` (for blurs).
+- \`tokens.variables.spacing\` → \`theme.extend.spacing\`.
+- \`tokens.variables.radius\` → \`theme.extend.borderRadius\`.
+
+### Naming Conventions
+- Token paths use "/" as separator in the original design file, converted to nested JSON keys.
+- Numeric keys (50, 100, 500…) typically represent shade scales.
+- The requested mode is indicated in \`meta.mode\`. Per-collection resolution may fall back to the default mode if the requested mode is not available. To get a different mode, call the tool again with the \`mode\` parameter.`;
+
+export function buildDesignTokensResult(payload) {
+  return {
+    content: [
+      { type: "text", text: DESIGN_TOKENS_GUIDE },
+      { type: "text", text: JSON.stringify(payload, null, 2) },
+    ],
+  };
+}
+
 /**
  * Обрабатывает вызов MCP-инструмента.
  * @param {string} name
@@ -278,6 +323,12 @@ export async function handleToolCall(name, args = {}) {
       }
       return { _diagnostic: true, pngPayload, svgPayload };
     }
+    case "get_design_tokens":
+      return unwrapPluginPayload(
+        await callPlugin("getDesignTokens", { mode: args.mode || "light" }, {
+          timeoutMs: DEFAULT_SELECTION_TIMEOUT_MS,
+        }),
+      );
     default:
       throw new Error(`Неизвестный инструмент: ${name}`);
   }

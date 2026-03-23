@@ -938,6 +938,275 @@ async function exportNodes(params = {}) {
   return { format, items, failures };
 }
 
+// --- Извлечение дизайн-токенов ---
+
+const MAX_ALIAS_DEPTH = 10;
+
+function toHexToken(r, g, b) {
+  return "#" + ((1 << 24) + (Math.round(r * 255) << 16) + (Math.round(g * 255) << 8) + Math.round(b * 255)).toString(16).slice(1);
+}
+
+function colorToToken(color, opacity) {
+  const a = opacity !== undefined ? opacity : (color.a !== undefined ? color.a : 1);
+  const hex = toHexToken(color.r, color.g, color.b);
+  if (a < 1) {
+    return `rgba(${Math.round(color.r * 255)},${Math.round(color.g * 255)},${Math.round(color.b * 255)},${r3(a)})`;
+  }
+  return hex;
+}
+
+function setNested(obj, segments, value) {
+  let current = obj;
+  for (let i = 0; i < segments.length - 1; i++) {
+    const key = segments[i];
+    if (!(key in current) || typeof current[key] !== "object" || current[key] === null) {
+      current[key] = {};
+    }
+    current = current[key];
+  }
+  current[segments[segments.length - 1]] = value;
+}
+
+function insertToken(target, path, value) {
+  const segments = path.split("/").filter(Boolean);
+  if (segments.length === 0) return;
+  setNested(target, segments, value);
+}
+
+function extractPaintTokens(style) {
+  const paints = Array.isArray(style.paints) ? style.paints.filter((p) => p.visible !== false) : [];
+  const nonImage = paints.filter((p) => p.type !== "IMAGE");
+  if (nonImage.length === 0) return null;
+
+  if (nonImage.length === 1) {
+    const paint = nonImage[0];
+    if (paint.type === "SOLID") {
+      return colorToToken(paint.color, paint.opacity);
+    }
+    const gradType = GRADIENT_TYPE[paint.type];
+    if (gradType) {
+      return {
+        type: gradType,
+        stops: paint.gradientStops.map((stop) => ({
+          color: colorToToken(stop.color, stop.color.a),
+          position: stop.position,
+        })),
+      };
+    }
+    return null;
+  }
+
+  return nonImage.map((paint) => {
+    if (paint.type === "SOLID") return colorToToken(paint.color, paint.opacity);
+    const gradType = GRADIENT_TYPE[paint.type];
+    if (gradType) {
+      return {
+        type: gradType,
+        stops: paint.gradientStops.map((stop) => ({
+          color: colorToToken(stop.color, stop.color.a),
+          position: stop.position,
+        })),
+      };
+    }
+    return null;
+  }).filter(Boolean);
+}
+
+function extractTextToken(style) {
+  const token = {};
+
+  if ("fontSize" in style && style.fontSize !== pixso.mixed) {
+    token.fontSize = style.fontSize;
+  }
+  if ("fontName" in style && style.fontName !== pixso.mixed) {
+    token.fontFamily = style.fontName.family;
+    const weight = resolveFontWeight(style.fontName);
+    if (weight) {
+      token.fontWeight = weight.fontWeight;
+      if (weight.fontStyle !== "normal") token.fontStyle = weight.fontStyle;
+    }
+  }
+  if ("lineHeight" in style && style.lineHeight !== pixso.mixed) {
+    const lh = style.lineHeight;
+    if (lh.unit === "AUTO") token.lineHeight = "normal";
+    else if (lh.unit === "PERCENT") token.lineHeight = r3(lh.value / 100);
+    else if (lh.unit === "PIXELS") token.lineHeight = lh.value;
+  }
+  if ("letterSpacing" in style && style.letterSpacing !== pixso.mixed) {
+    const ls = style.letterSpacing;
+    if (ls.unit === "PIXELS" && ls.value !== 0) token.letterSpacing = ls.value;
+    else if (ls.unit === "PERCENT" && ls.value !== 0) token.letterSpacing = r3(ls.value / 100);
+  }
+  if ("textCase" in style && style.textCase !== pixso.mixed) {
+    const value = TEXT_CASE_MAP[style.textCase];
+    if (value) token.textCase = value;
+  }
+  if ("textDecoration" in style && style.textDecoration !== pixso.mixed) {
+    const value = TEXT_DECORATION_MAP[style.textDecoration];
+    if (value) token.textDecoration = value;
+  }
+
+  return Object.keys(token).length > 0 ? token : null;
+}
+
+function extractEffectToken(style) {
+  const effects = Array.isArray(style.effects) ? style.effects.filter((e) => e.visible !== false) : [];
+  if (effects.length === 0) return null;
+
+  return effects.map((effect) => {
+    if (effect.type === "DROP_SHADOW" || effect.type === "INNER_SHADOW") {
+      const data = {
+        type: effect.type,
+        x: effect.offset.x,
+        y: effect.offset.y,
+        blur: effect.radius,
+        color: colorToToken(effect.color, effect.color.a),
+      };
+      if (effect.spread) data.spread = effect.spread;
+      return data;
+    }
+    if (effect.type === "LAYER_BLUR" || effect.type === "BACKGROUND_BLUR") {
+      return { type: effect.type, radius: effect.radius };
+    }
+    return null;
+  }).filter(Boolean);
+}
+
+function findModeId(collection, requestedMode) {
+  const lower = requestedMode.toLowerCase();
+  const match = collection.modes.find((m) => m.name.toLowerCase() === lower);
+  return match ? match.modeId : collection.defaultModeId;
+}
+
+async function resolveVariableValue(variable, modeId, modeName, warnings) {
+  let current = variable;
+  let currentModeId = modeId;
+
+  for (let depth = 0; depth < MAX_ALIAS_DEPTH; depth++) {
+    const value = current.valuesByMode[currentModeId];
+    if (value === undefined) {
+      const collection = await pixso.variables.getVariableCollectionByIdAsync(current.variableCollectionId);
+      if (!collection) return undefined;
+      const fallbackValue = current.valuesByMode[collection.defaultModeId];
+      if (fallbackValue === undefined) return undefined;
+      if (fallbackValue && typeof fallbackValue === "object" && fallbackValue.type === "VARIABLE_ALIAS") {
+        current = await pixso.variables.getVariableByIdAsync(fallbackValue.id);
+        if (!current) {
+          warnings.push(`Не удалось разрешить алиас: ${variable.name} → ${fallbackValue.id}`);
+          return undefined;
+        }
+        const targetCollection = await pixso.variables.getVariableCollectionByIdAsync(current.variableCollectionId);
+        currentModeId = targetCollection ? findModeId(targetCollection, modeName) : current.variableCollectionId;
+        continue;
+      }
+      return fallbackValue;
+    }
+
+    if (value && typeof value === "object" && value.type === "VARIABLE_ALIAS") {
+      current = await pixso.variables.getVariableByIdAsync(value.id);
+      if (!current) {
+        warnings.push(`Не удалось разрешить алиас: ${variable.name} → ${value.id}`);
+        return undefined;
+      }
+      const targetCollection = await pixso.variables.getVariableCollectionByIdAsync(current.variableCollectionId);
+      currentModeId = targetCollection ? findModeId(targetCollection, modeName) : currentModeId;
+      continue;
+    }
+
+    return value;
+  }
+
+  warnings.push(`Превышена глубина разрешения алиасов (макс ${MAX_ALIAS_DEPTH}): ${variable.name}`);
+  return undefined;
+}
+
+function convertVariableValue(resolvedType, value) {
+  if (resolvedType === "COLOR" && value && typeof value === "object" && "r" in value) {
+    return colorToToken(value, value.a);
+  }
+  return value;
+}
+
+async function getDesignTokens(params) {
+  const requestedMode = (params && params.mode) || "light";
+  const warnings = [];
+  const colors = {};
+  const typography = {};
+  const effects = {};
+  const variables = {};
+  const sources = { paintStyles: 0, textStyles: 0, effectStyles: 0, variables: 0 };
+  const allModeNames = new Set();
+
+  const paintStyles = pixso.getLocalPaintStyles();
+  sources.paintStyles = paintStyles.length;
+  for (const style of paintStyles) {
+    const value = extractPaintTokens(style);
+    if (value !== null) insertToken(colors, style.name, value);
+  }
+
+  const textStyles = pixso.getLocalTextStyles();
+  sources.textStyles = textStyles.length;
+  for (const style of textStyles) {
+    const value = extractTextToken(style);
+    if (value !== null) insertToken(typography, style.name, value);
+  }
+
+  const effectStyles = pixso.getLocalEffectStyles();
+  sources.effectStyles = effectStyles.length;
+  for (const style of effectStyles) {
+    const value = extractEffectToken(style);
+    if (value !== null) insertToken(effects, style.name, value);
+  }
+
+  try {
+    if (pixso.variables && typeof pixso.variables.getLocalVariableCollectionsAsync === "function") {
+      const collections = await pixso.variables.getLocalVariableCollectionsAsync();
+      const allVars = await pixso.variables.getLocalVariablesAsync();
+
+      const collectionMap = new Map();
+      for (const col of collections) {
+        collectionMap.set(col.id, col);
+        for (const mode of col.modes) {
+          allModeNames.add(mode.name);
+        }
+      }
+
+      sources.variables = allVars.length;
+
+      for (const variable of allVars) {
+        const collection = collectionMap.get(variable.variableCollectionId);
+        if (!collection) continue;
+
+        const modeId = findModeId(collection, requestedMode);
+        const rawValue = await resolveVariableValue(variable, modeId, requestedMode, warnings);
+        if (rawValue === undefined) continue;
+
+        const value = convertVariableValue(variable.resolvedType, rawValue);
+        const tokenPath = `${collection.name}/${variable.name}`;
+
+        if (variable.resolvedType === "COLOR") {
+          insertToken(colors, tokenPath, value);
+        } else {
+          insertToken(variables, tokenPath, value);
+        }
+      }
+    }
+  } catch (err) {
+    warnings.push(`Variables API недоступен: ${err instanceof Error ? err.message : String(err)}`);
+  }
+
+  return {
+    meta: {
+      fileName: pixso.root.name,
+      mode: requestedMode,
+      availableModes: Array.from(allModeNames).sort(),
+      sources,
+      warnings,
+    },
+    tokens: { colors, typography, effects, variables },
+  };
+}
+
 // --- Обработка сообщений от UI (из WebSocket-моста) ---
 
 pixso.ui.onmessage = async (msg) => {
@@ -978,6 +1247,18 @@ pixso.ui.onmessage = async (msg) => {
           totalCount,
         });
         postResponse(request, payload);
+        break;
+      }
+
+      case "getDesignTokens": {
+        const tokensPayload = await getDesignTokens(params || {});
+        markDone(request, {
+          paintStyles: tokensPayload.meta.sources.paintStyles,
+          textStyles: tokensPayload.meta.sources.textStyles,
+          effectStyles: tokensPayload.meta.sources.effectStyles,
+          variables: tokensPayload.meta.sources.variables,
+        });
+        postResponse(request, tokensPayload);
         break;
       }
 

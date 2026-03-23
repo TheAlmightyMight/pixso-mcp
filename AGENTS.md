@@ -45,9 +45,9 @@ MCP Client (Codex) <--HTTP:3668/mcp--> server/index.js
 
 - `server/index.js`: Entry point. Creates MCP server, starts WebSocket bridge, registers tool handlers.
 - `server/bridge.js`: Manages WebSocket connection to the Pixso plugin. Exports `startBridge()` and `callPlugin(command, params)`. Pending requests tracked in a `Map<id, resolve>`.
-- `server/tools.js`: Определяет MCP-инструменты (`get_selection`). Экспортирует `toolDefinitions` и `handleToolCall(name)`.
+- `server/tools.js`: Определяет MCP-инструменты (`get_selection`, `get_selection_png`, `get_selection_svg`, `diagnose_export`, `get_design_tokens`). Экспортирует `handleToolCall(name)`.
 - `plugin/ui.html`: WebSocket client with auto-reconnect (5s). Forwards `request` messages from server to `main.js` via `parent.postMessage`, and sends `mcp-response` messages back to the server.
-- `plugin/main.js`: Runs in Pixso's plugin sandbox. Handles commands by reading the Pixso document tree via the `pixso` global API. `serializeNode(node, profile)` extracts node properties with token-saving optimizations (rounding, filtering).
+- `plugin/main.js`: Runs in Pixso's plugin sandbox. Handles `getSelection`, `exportNodes`, and `getDesignTokens` commands via the `pixso` global API. `serializeNode(node, profile)` extracts node properties with token-saving optimizations. `getDesignTokens` extracts design tokens (colors, typography, effects, variables) from the entire document.
 
 ## Key Conventions
 

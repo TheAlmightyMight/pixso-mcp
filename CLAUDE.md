@@ -55,9 +55,9 @@ MCP Client (Claude) <--HTTP:3668/mcp--> server/index.js
 
 - `server/index.js`: Entry point. Uses `createMcpExpressApp()` with StreamableHTTPServerTransport. Creates per-session MCP server instances with session init/cleanup handlers.
 - `server/bridge.js`: Manages WebSocket connection to the Pixso plugin. Exports `startBridge()` and `callPlugin(command, params)`. Features lane-based request scheduling (default lane = unbounded concurrency, export lane = concurrency 1), timeout handling with `recoverOnTimeout` option, recovery mode for socket failures, and structured JSON event logging.
-- `server/tools.js`: Defines four MCP tools with Zod-validated input schemas. Exports `toolDefinitions` and `handleToolCall(name)`. Includes `buildExportToolResult` (SVG as text, PNG as image) and `buildDiagnosticResult`.
+- `server/tools.js`: Defines five MCP tools with Zod-validated input schemas. Exports `toolDefinitions` and `handleToolCall(name)`. Includes `buildExportToolResult` (SVG as text, PNG as image) and `buildDiagnosticResult`.
 - `plugin/ui.html`: WebSocket client with auto-reconnect (5s). Forwards `request` messages from server to `main.js` via `parent.postMessage`, and sends `mcp-response` messages back. UI shows connection status, request stats, request log with timestamps, uptime, and reconnection counter.
-- `plugin/main.js`: Runs in Pixso's plugin sandbox. Handles `getSelection` and `exportNodes` commands. Uses 11 property extractors (extractStyles, extractBase, extractFills, etc.) for node serialization with token-saving optimizations. Includes asset analysis (`analyzeNode()`) for vector/raster classification, coherent asset detection, and image fill analysis. Export queue processes serially (concurrency=1).
+- `plugin/main.js`: Runs in Pixso's plugin sandbox. Handles `getSelection`, `exportNodes`, and `getDesignTokens` commands. Uses 11 property extractors (extractStyles, extractBase, extractFills, etc.) for node serialization with token-saving optimizations. Includes asset analysis (`analyzeNode()`) for vector/raster classification, coherent asset detection, and image fill analysis. Export queue processes serially (concurrency=1).
 
 ## MCP Tools
 
@@ -67,6 +67,7 @@ MCP Client (Claude) <--HTTP:3668/mcp--> server/index.js
 | `get_selection_png` | `exportNodes` | Exports selected nodes as PNG with size constraints (Zod-validated) |
 | `get_selection_svg` | `exportNodes` | Exports selected nodes as SVG as text content (Zod-validated) |
 | `diagnose_export` | `exportNodes` (x2) | Diagnostic: exports PNG+SVG, validates data, returns report (no images) |
+| `get_design_tokens` | `getDesignTokens` | Extracts design tokens (colors, typography, effects, variables) from the entire document |
 
 ### Asset Export Hints
 
