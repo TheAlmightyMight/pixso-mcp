@@ -28,10 +28,13 @@
 ```javascript
 {
   mode: z.string()
+    .optional()
     .default("light")
     .describe("Variable mode to resolve (e.g. 'light', 'dark'). Defaults to 'light'. Only affects Variables, not Styles.")
 }
 ```
+
+> Примечание: `.optional().default()` — для совместимости с JSON Schema генерацией MCP-клиентов (консистентно с существующими схемами в `tools.js`).
 
 ### Команда плагина
 
@@ -42,28 +45,40 @@
 ### Источники данных (по порядку)
 
 1. **Paint Styles** — `pixso.getLocalPaintStyles()`:
-   - `name` → путь токена
-   - Первый видимый `SOLID` paint → `{ hex, opacity }`
-   - Градиенты → `{ type, stops: [{ color, position }] }`
+   - `name` → путь токена (используется как есть, без `stripStylePrefix` — полная иерархия имён важна для токенов)
+   - Первый видимый `SOLID` paint → hex-строка; при `opacity < 1` → `rgba()`
+   - Градиенты → `{ type, stops: [{ color, position }] }` (color в формате hex при `a === 1`, `rgba()` при `a < 1`)
    - `IMAGE`-заливки пропускаются
+   - Множественные видимые заливки → массив значений
 
 2. **Text Styles** — `pixso.getLocalTextStyles()`:
    - `name` → путь токена
-   - `fontSize`, `fontFamily`, `fontWeight` (из `fontName`)
-   - `lineHeight` (нормализация в px или множитель)
-   - `letterSpacing` (нормализация в px или em)
-   - `textCase`, `textDecoration`
+   - `fontSize` (число, px)
+   - `fontFamily`, `fontWeight` (из `fontName`)
+   - `lineHeight`: `unit === "AUTO"` → `"normal"`, `unit === "PERCENT"` → безразмерный множитель (`value / 100`, напр. `150%` → `1.5`), `unit === "PIXELS"` → число (px)
+   - `letterSpacing`: `unit === "PIXELS"` → число (px), `unit === "PERCENT"` → число em (`value / 100`, напр. `2%` → `0.02`)
+   - `textCase`, `textDecoration` — опускаются если `"ORIGINAL"` / `"NONE"`
 
 3. **Effect Styles** — `pixso.getLocalEffectStyles()`:
    - `name` → путь токена
-   - Тени → `{ type, x, y, blur, spread, color }`
+   - Каждый Effect Style → **массив эффектов** (стиль может содержать несколько теней/размытий)
+   - Тени → `{ type, x, y, blur, spread, color }` (color нормализуется как для заливок)
    - Размытие → `{ type, radius }`
 
 4. **Variables** (async, если доступно) — `pixso.variables.getLocalVariableCollectionsAsync()` + `getLocalVariablesAsync()`:
-   - `name` → путь токена (уже использует `/` для групп)
+   - Путь токена: `{collectionName}/{variableName}` — имя коллекции сохраняется как префикс для всех переменных (в т.ч. COLOR), что предотвращает коллизии между коллекциями
    - `resolvedType` — `COLOR`, `FLOAT`, `STRING`, `BOOLEAN`
    - Значение для запрошенного `mode` (фолбэк на `defaultModeId`)
-   - Имя коллекции как префикс верхнего уровня
+
+### Разрешение псевдонимов (Variable Aliases)
+
+`valuesByMode[modeId]` может вернуть `VariableAlias` (`{ type: "VARIABLE_ALIAS", id: "..." }`) вместо конкретного значения — это стандартная практика для семантических токенов (напр., `semantic/primary` → `palette/blue-500`).
+
+**Алгоритм разрешения:**
+1. Получить значение через `variable.valuesByMode[modeId]`
+2. Если значение — `VariableAlias`, загрузить переменную через `pixso.variables.getVariableByIdAsync(alias.id)`
+3. Рекурсивно повторять до получения конкретного значения
+4. **Защита от циклов:** максимум 10 итераций; при превышении — пропустить переменную, записать предупреждение в `meta.warnings`
 
 ### Логика вложенности
 
@@ -76,36 +91,51 @@
 
 ### Нормализация цветов
 
-Pixso использует `{ r, g, b }` с float (0–1). Плагин конвертирует в hex (`#3B82F6`). При opacity < 1 — формат `rgba()`.
+Pixso использует `{ r, g, b }` с float (0–1). Плагин конвертирует:
+- `a === 1` (или отсутствует) → hex-строка (`#3B82F6`)
+- `a < 1` → `rgba(r, g, b, a)` строка
+
+Та же логика применяется к градиентным стопам и цветам эффектов.
 
 ### Разрешение режимов для Variables
 
-Плагин получает `params.mode` (по умолчанию `"light"`). Для каждой коллекции ищет `modeId`, чей `name` совпадает (без учёта регистра). Если совпадения нет — используется `defaultModeId`.
+Плагин получает `params.mode` (по умолчанию `"light"`). Для каждой коллекции ищет `modeId`, чей `name` совпадает (без учёта регистра). Если совпадения нет — используется `defaultModeId`. Поле `meta.mode` всегда отражает **запрошенный** режим (не разрешённый), чтобы LLM понимал, что было запрошено.
+
+### Имя файла
+
+`pixso.root.name` используется для поля `meta.fileName`.
 
 ## Структура выходного JSON
 
 ```javascript
 {
   meta: {
-    fileName: "UI Kit v2",
-    mode: "light",
-    availableModes: ["light", "dark"],
+    fileName: "UI Kit v2",           // pixso.root.name
+    mode: "light",                    // запрошенный режим
+    availableModes: ["dark", "light"], // уникальные имена режимов из всех коллекций, отсортированы
     sources: {
       paintStyles: 24,
       textStyles: 12,
       effectStyles: 5,
       variables: 48
-    }
+    },
+    warnings: []                      // предупреждения (напр., неразрешённые алиасы)
   },
   tokens: {
     colors: {
-      // Из Paint Styles + COLOR-переменных
+      // Из Paint Styles
       primary: {
         50:  "#EFF6FF",
         500: "#3B82F6",
         900: "#1E3A8A"
       },
-      neutral: { /* ... */ }
+      neutral: { /* ... */ },
+      // Из COLOR-переменных (с префиксом коллекции)
+      primitives: {
+        blue: {
+          500: "#3B82F6"
+        }
+      }
     },
     typography: {
       // Из Text Styles
@@ -114,23 +144,25 @@ Pixso использует `{ r, g, b }` с float (0–1). Плагин конв
         h2: { fontSize: 28, fontFamily: "Inter", fontWeight: 600, lineHeight: 1.3 }
       },
       body: {
-        regular: { fontSize: 16, fontFamily: "Inter", fontWeight: 400, lineHeight: 1.5 }
+        regular: { fontSize: 16, fontFamily: "Inter", fontWeight: 400, lineHeight: 1.5, letterSpacing: 0 }
       }
     },
     effects: {
-      // Из Effect Styles
+      // Из Effect Styles (каждый стиль → массив эффектов)
       shadow: {
         sm: [{ type: "DROP_SHADOW", x: 0, y: 1, blur: 2, spread: 0, color: "rgba(0,0,0,0.05)" }],
         md: [{ type: "DROP_SHADOW", x: 0, y: 4, blur: 6, spread: -1, color: "rgba(0,0,0,0.1)" }]
       },
       blur: {
-        backdrop: { type: "BACKGROUND_BLUR", radius: 8 }
+        backdrop: [{ type: "BACKGROUND_BLUR", radius: 8 }]
       }
     },
     variables: {
-      // Переменные, не относящиеся к цветам
-      spacing: { xs: 4, sm: 8, md: 16, lg: 24, xl: 32 },
-      radius: { sm: 4, md: 8, lg: 12, full: 9999 }
+      // Переменные FLOAT/STRING/BOOLEAN (с префиксом коллекции)
+      tokens: {
+        spacing: { xs: 4, sm: 8, md: 16, lg: 24, xl: 32 },
+        radius: { sm: 4, md: 8, lg: 12, full: 9999 }
+      }
     }
   }
 }
@@ -144,10 +176,14 @@ Pixso использует `{ r, g, b }` с float (0–1). Плагин конв
 | Text Styles | `tokens.typography` |
 | Effect Styles | `tokens.effects` |
 | Variables `resolvedType: "COLOR"` | Мержатся в `tokens.colors` |
-| Variables `resolvedType: "FLOAT"` / `"STRING"` | `tokens.variables` (группировка по имени коллекции) |
-| Variables `resolvedType: "BOOLEAN"` | `tokens.variables` |
+| Variables `resolvedType: "FLOAT"` / `"STRING"` | `tokens.variables` (путь: `{collection}/{name}`) |
+| Variables `resolvedType: "BOOLEAN"` | `tokens.variables` (путь: `{collection}/{name}`) |
 
-При конфликте путей между Paint Style и Variable — **Variable имеет приоритет** (переменные — более новая и осознанная система токенов).
+**Префикс коллекции:** все переменные (включая COLOR) получают имя коллекции как верхний уровень вложенности. Это предотвращает коллизии между коллекциями и сохраняет структуру, задуманную дизайнером.
+
+**Конфликт путей:** при совпадении путей (напр., Paint Style `primary/500` и Variable `primary/500`) — **Variable имеет приоритет** (переменные — более новая и осознанная система токенов). На практике конфликт маловероятен из-за префикса коллекции у переменных.
+
+**Дубликаты:** при совпадении имён внутри одной категории — побеждает последний встреченный (на практике Pixso не допускает дубликатов имён стилей).
 
 ## Гайд для LLM (прикрепляется к ответу)
 
@@ -161,9 +197,9 @@ Pixso использует `{ r, g, b }` с float (0–1). Плагин конв
 This JSON contains design tokens extracted from a Pixso design file.
 
 ### Structure
-- `meta` — file info, resolved mode, available modes, and token source counts.
+- `meta` — file info, requested mode, available modes, token source counts, and warnings.
 - `tokens.colors` — color palette. Leaf values are hex strings ("#3B82F6") or rgba() for semi-transparent colors. Nesting reflects the designer's grouping (e.g., primary/500 → { primary: { 500: "#..." } }).
-- `tokens.typography` — text styles. Each leaf is an object with fontSize (px), fontFamily, fontWeight (100–900), lineHeight (unitless ratio or px), letterSpacing (em).
+- `tokens.typography` — text styles. Each leaf is an object with fontSize (px), fontFamily, fontWeight (100–900), lineHeight (unitless ratio for %, "normal" for auto, or number in px), letterSpacing (em for %, px for pixel values).
 - `tokens.effects` — shadow and blur definitions. Shadows have x/y/blur/spread (px) and color. Blurs have radius (px).
 - `tokens.variables` — other design tokens (spacing, radii, booleans, strings) grouped by their variable collection name.
 
@@ -177,7 +213,7 @@ This JSON contains design tokens extracted from a Pixso design file.
 ### Naming Conventions
 - Token paths use "/" as separator in the original design file, converted to nested JSON keys.
 - Numeric keys (50, 100, 500…) typically represent shade scales.
-- The resolved mode is indicated in `meta.mode`. To get a different mode, call the tool again with the `mode` parameter.
+- The requested mode is indicated in `meta.mode`. Per-collection resolution may fall back to the default mode if the requested mode is not available. To get a different mode, call the tool again with the `mode` parameter.
 ```
 
 2. **Текстовый блок** — JSON с токенами (`JSON.stringify(payload, null, 2)`).
@@ -187,10 +223,11 @@ This JSON contains design tokens extracted from a Pixso design file.
 | Ситуация | Поведение |
 |----------|-----------|
 | Файл без стилей и переменных | Пустой `tokens`, `meta.sources` все нули. Не ошибка. |
-| Запрошенный `mode` не найден | Фолбэк на `defaultModeId`. `meta.mode` отражает фактический режим (например, `"light (fallback to default)"`). |
+| Запрошенный `mode` не найден | Фолбэк на `defaultModeId` для данной коллекции. `meta.mode` всегда отражает запрошенный режим. |
 | `pixso.variables` API недоступен | try/catch, переменные пропускаются, `variables: 0` в `meta.sources`. |
 | Множественные заливки в Paint Style | Одна видимая → значение токена. Несколько видимых → массив значений. |
 | Градиентные цвета | Возвращаются как `{ type, stops }`, не редуцируются до hex. |
+| Неразрешённые алиасы переменных | Макс. 10 итераций разрешения; при превышении — переменная пропускается, предупреждение в `meta.warnings`. |
 | Таймаут | Lane `"default"`, стандартный таймаут. Без `recoverOnTimeout`. |
 | Плагин не подключён | Стандартная обработка bridge — `callPlugin` выбрасывает ошибку. |
 
