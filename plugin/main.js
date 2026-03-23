@@ -1028,7 +1028,7 @@ function extractTextToken(style) {
   if ("fontSize" in style && style.fontSize !== pixso.mixed) {
     token.fontSize = style.fontSize;
   }
-  if ("fontName" in style && style.fontName !== pixso.mixed) {
+  if ("fontName" in style && style.fontName !== pixso.mixed && style.fontName.family) {
     token.fontFamily = style.fontName.family;
     const weight = resolveFontWeight(style.fontName);
     if (weight) {
