@@ -37,17 +37,6 @@ const GRADIENT_TYPE = {
   GRADIENT_ANGULAR: "conic-gradient", GRADIENT_DIAMOND: "diamond-gradient",
 };
 
-const FONT_WEIGHT = {
-  thin: 100, hairline: 100,
-  extralight: 200, ultralight: 200,
-  light: 300,
-  regular: 400, normal: 400,
-  medium: 500,
-  semibold: 600, demibold: 600,
-  bold: 700,
-  extrabold: 800, ultrabold: 800,
-  black: 900, heavy: 900,
-};
 
 const VECTOR_NODE_TYPES = new Set([
   "VECTOR",
@@ -281,14 +270,35 @@ function resolveLetterSpacing(ls) {
   return null;
 }
 
+const WEIGHT_PATTERNS = [
+  [/\bextra\s*bold\b|\bultra\s*bold\b/, 800],
+  [/\bsemi\s*bold\b|\bdemi\s*bold\b/, 600],
+  [/\bextra\s*light\b|\bultra\s*light\b/, 200],
+  [/\bhairline\b/, 100],
+  [/\bthin\b/, 100],
+  [/\blight\b/, 300],
+  [/\bregular\b|\bnormal\b/, 400],
+  [/\bmedium\b/, 500],
+  [/\bbold\b/, 700],
+  [/\bblack\b|\bheavy\b/, 900],
+  [/\bw(\d)\b/, 0],
+];
+
 function resolveFontWeight(fontName) {
   if (!fontName || fontName === pixso.mixed) return null;
   const style = fontName.style || "";
   const lower = style.toLowerCase();
   const isItalic = lower.includes("italic");
-  const weightKey = lower.replace(/italic/g, "").trim().replace(/[\s-]+/g, "");
-  const weight = FONT_WEIGHT[weightKey] || 400;
-  return { fontWeight: weight, fontStyle: isItalic ? "italic" : "normal" };
+
+  for (const [pattern, w] of WEIGHT_PATTERNS) {
+    const match = lower.match(pattern);
+    if (match) {
+      const weight = w === 0 ? Number(match[1]) * 100 : w;
+      return { fontWeight: weight, fontStyle: isItalic ? "italic" : "normal" };
+    }
+  }
+
+  return { fontWeight: 400, fontStyle: isItalic ? "italic" : "normal" };
 }
 
 function getVisibleChildren(node) {
