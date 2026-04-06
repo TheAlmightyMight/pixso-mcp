@@ -1,0 +1,27 @@
+{
+  "name": "pixso-mcp-server",
+  "version": "1.0.0",
+  "type": "module",
+  "description": "MCP server for Pixso design tool",
+  "main": "server/index.js",
+  "scripts": {
+    "start": "node server/index.js",
+    "count-tokens": "node count-tokens.js",
+    "debug-export": "node debug-export.js",
+    "typecheck": "tsc --noEmit",
+    "lint:all": "eslint .",
+    "dev": "cd __tests__/test-app && npm run dev"
+  },
+  "dependencies": {
+    "@modelcontextprotocol/sdk": "^1.27.1",
+    "express": "^5.2.1",
+    "ws": "^8.18.0",
+    "zod": "^3.24.1"
+  },
+  "devDependencies": {
+    "@eslint/js": "^10.0.1",
+    "@types/express": "^5.0.6",
+    "eslint": "^10.0.3",
+    "globals": "^17.4.0"
+  }
+}

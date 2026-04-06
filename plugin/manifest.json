@@ -1,0 +1,14 @@
+{
+  "name": "Pixso MCP",
+  "id": "mcp-pixso-plugin",
+  "api": "1.0.0",
+  "main": "main.js",
+  "ui": "ui.html",
+  "editorType": ["pixso", "dev"],
+  "menu": [
+    {
+      "name": "Open / Launch",
+      "command": "Opened."
+    }
+  ]
+}
